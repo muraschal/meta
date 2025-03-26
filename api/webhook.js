@@ -1,41 +1,43 @@
 import OpenAI from 'openai';
-import axios from 'axios';
+import got from 'got';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Erstelle einen axios-Client mit Standardkonfiguration
-const whatsappClient = axios.create({
-  baseURL: 'https://graph.facebook.com/v17.0',
-  timeout: 10000,
-  headers: {
-    'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-    'Content-Type': 'application/json'
-  }
-});
-
 async function sendWhatsAppMessage(to, message) {
+  const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  
   try {
-    console.log(`Sende Nachricht an ${to}`);
+    console.log(`Sende Nachricht an ${to}: ${message}`);
     
-    const response = await whatsappClient.post(
-      `/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      {
+    const response = await got.post(url, {
+      json: {
         messaging_product: 'whatsapp',
         to,
         type: 'text',
         text: { body: message }
+      },
+      headers: {
+        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: {
+        request: 10000
+      },
+      retry: {
+        limit: 2,
+        methods: ['POST']
       }
-    );
+    }).json();
     
-    console.log('WhatsApp Antwort:', response.status);
+    console.log('WhatsApp Antwort:', response);
     return true;
   } catch (error) {
     console.error('WhatsApp Fehler:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
+      code: error.code,
+      message: error.message,
+      response: error.response?.body
     });
     return false;
   }
@@ -52,7 +54,9 @@ async function getOpenAIResponse(content) {
       temperature: 0.7
     });
 
-    return completion?.choices?.[0]?.message?.content || 'Keine Antwort von OpenAI erhalten';
+    const response = completion?.choices?.[0]?.message?.content;
+    console.log('OpenAI Antwort:', response);
+    return response || 'Keine Antwort von OpenAI erhalten';
   } catch (error) {
     console.error('OpenAI Fehler:', error.message);
     throw new Error('Fehler bei der OpenAI-Anfrage');
@@ -62,13 +66,14 @@ async function getOpenAIResponse(content) {
 async function handleMessage(from, content) {
   try {
     // Sende Bestätigung
+    console.log('Sende Bestätigung...');
     const confirmSent = await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
     if (!confirmSent) {
       throw new Error('Konnte Bestätigung nicht senden');
     }
     
     // Hole OpenAI Antwort mit Timeout
-    console.log('Starte OpenAI Anfrage');
+    console.log('Starte OpenAI Verarbeitung...');
     const response = await Promise.race([
       getOpenAIResponse(content),
       new Promise((_, reject) => 
@@ -76,21 +81,21 @@ async function handleMessage(from, content) {
       )
     ]);
     
-    console.log('OpenAI Antwort erhalten');
-    
-    // Sende Antwort
+    console.log('Sende OpenAI Antwort...');
     const sent = await sendWhatsAppMessage(from, response);
     if (!sent) {
       throw new Error('Konnte Antwort nicht senden');
     }
     
-    console.log('Antwort erfolgreich gesendet');
+    console.log('Verarbeitung abgeschlossen');
   } catch (error) {
     console.error('Verarbeitungsfehler:', error.message);
-    await sendWhatsAppMessage(from, 
-      'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
-      (error.message === 'Timeout' ? 'Die Anfrage hat zu lange gedauert.' : 'Bitte versuchen Sie es später erneut.')
-    ).catch(console.error);
+    const errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
+      (error.message === 'Timeout' ? 'Die Anfrage hat zu lange gedauert.' : 'Bitte versuchen Sie es später erneut.');
+    
+    await sendWhatsAppMessage(from, errorMessage).catch(err => {
+      console.error('Fehler beim Senden der Fehlermeldung:', err.message);
+    });
   }
 }
 
@@ -114,6 +119,7 @@ export default async function handler(req, res) {
 
     try {
       const { body } = req;
+      console.log('Webhook empfangen:', JSON.stringify(body, null, 2));
       
       if (body?.object === 'whatsapp_business_account') {
         const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -136,10 +142,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Webhook Fehler:', error);
     }
-    
-    return;
   }
 
-  res.setHeader('Allow', ['GET', 'POST']);
   return res.status(405).end();
 } 
