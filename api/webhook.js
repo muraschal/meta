@@ -1,20 +1,41 @@
-const whatsappService = require('../src/services/whatsapp');
-const openaiService = require('../src/services/openai');
+import OpenAI from 'openai';
 
-module.exports = async (req, res) => {
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+async function sendWhatsAppMessage(to, message) {
+  const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'text',
+      text: { body: message }
+    })
+  });
+  return response.json();
+}
+
+export default async function handler(req, res) {
   if (req.method === 'GET') {
-    // Webhook-Verifizierung
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
       console.log('Webhook wurde verifiziert');
-      res.status(200).send(challenge);
-    } else {
-      res.sendStatus(403);
+      return res.status(200).send(challenge);
     }
-  } else if (req.method === 'POST') {
+    return res.status(403).end();
+  }
+
+  if (req.method === 'POST') {
     try {
       const { body } = req;
       
@@ -33,30 +54,42 @@ module.exports = async (req, res) => {
         const from = message.from;
         const messageType = message.type;
 
-        // Verarbeite "Hey Meta" Befehle
         if (messageType === 'text' && message.text.body.toLowerCase().startsWith('hey meta')) {
           const command = message.text.body.toLowerCase();
           console.log('Meta Glasses Befehl empfangen:', command);
 
           if (command.includes('message to')) {
             const content = command.split('message to')[1].trim();
-            const response = await openaiService.processMessage(from, content);
-            await whatsappService.sendMessage(from, response);
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4",
+              messages: [{ role: "user", content }],
+            });
+            await sendWhatsAppMessage(from, completion.choices[0].message.content);
           }
         }
 
-        // Verarbeite Bilder
         if (messageType === 'image') {
           const imageUrl = message.image.url;
-          const response = await openaiService.processMessage(from, "Beschreibe dieses Bild", imageUrl);
-          await whatsappService.sendMessage(from, response);
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4-vision-preview",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "Beschreibe dieses Bild" },
+                  { type: "image_url", image_url: imageUrl }
+                ],
+              },
+            ],
+          });
+          await sendWhatsAppMessage(from, completion.choices[0].message.content);
         }
       }
     } catch (error) {
       console.error('Fehler bei der Webhook-Verarbeitung:', error);
     }
-  } else {
-    res.setHeader('Allow', ['GET', 'POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-}; 
+
+  res.setHeader('Allow', ['GET', 'POST']);
+  return res.status(405).end(`Method ${req.method} Not Allowed`);
+} 
