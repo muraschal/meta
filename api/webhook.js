@@ -1,51 +1,56 @@
 import OpenAI from 'openai';
-import got from 'got';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 async function sendWhatsAppMessage(to, message) {
-  const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  
   try {
-    console.log(`Sende Nachricht an ${to}: ${message}`);
-    
-    const response = await got.post(url, {
-      json: {
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: message }
-      },
-      headers: {
-        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: {
-        request: 10000
-      },
-      retry: {
-        limit: 2,
-        methods: ['POST']
+    console.log('=== SENDE WHATSAPP NACHRICHT ===');
+    console.log('An:', to);
+    console.log('Nachricht:', message);
+    console.log('Token:', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
+    console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+
+    const response = await fetch(
+      `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to,
+          type: 'text',
+          text: { body: message }
+        })
       }
-    }).json();
-    
-    console.log('WhatsApp Antwort:', response);
+    );
+
+    console.log('Status:', response.status);
+    const responseData = await response.text();
+    console.log('Antwort:', responseData);
+
+    if (!response.ok) {
+      throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
+    }
+
     return true;
   } catch (error) {
-    console.error('WhatsApp Fehler:', {
-      code: error.code,
-      message: error.message,
-      response: error.response?.body
-    });
+    console.error('=== WHATSAPP FEHLER ===');
+    console.error('Fehlertyp:', error.name);
+    console.error('Fehlermeldung:', error.message);
+    console.error('Stack:', error.stack);
     return false;
   }
 }
 
 async function getOpenAIResponse(content) {
   try {
-    console.log('OpenAI Anfrage:', content);
+    console.log('=== OPENAI ANFRAGE ===');
+    console.log('Inhalt:', content);
     
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -58,53 +63,25 @@ async function getOpenAIResponse(content) {
     console.log('OpenAI Antwort:', response);
     return response || 'Keine Antwort von OpenAI erhalten';
   } catch (error) {
-    console.error('OpenAI Fehler:', error.message);
-    throw new Error('Fehler bei der OpenAI-Anfrage');
-  }
-}
-
-async function handleMessage(from, content) {
-  try {
-    // Sende Bestätigung
-    console.log('Sende Bestätigung...');
-    const confirmSent = await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
-    if (!confirmSent) {
-      throw new Error('Konnte Bestätigung nicht senden');
-    }
-    
-    // Hole OpenAI Antwort mit Timeout
-    console.log('Starte OpenAI Verarbeitung...');
-    const response = await Promise.race([
-      getOpenAIResponse(content),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 15000)
-      )
-    ]);
-    
-    console.log('Sende OpenAI Antwort...');
-    const sent = await sendWhatsAppMessage(from, response);
-    if (!sent) {
-      throw new Error('Konnte Antwort nicht senden');
-    }
-    
-    console.log('Verarbeitung abgeschlossen');
-  } catch (error) {
-    console.error('Verarbeitungsfehler:', error.message);
-    const errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
-      (error.message === 'Timeout' ? 'Die Anfrage hat zu lange gedauert.' : 'Bitte versuchen Sie es später erneut.');
-    
-    await sendWhatsAppMessage(from, errorMessage).catch(err => {
-      console.error('Fehler beim Senden der Fehlermeldung:', err.message);
-    });
+    console.error('=== OPENAI FEHLER ===');
+    console.error('Fehlertyp:', error.name);
+    console.error('Fehlermeldung:', error.message);
+    console.error('Stack:', error.stack);
+    throw error;
   }
 }
 
 export default async function handler(req, res) {
+  console.log('=== WEBHOOK HANDLER START ===');
+  console.log('Methode:', req.method);
+  
   // Webhook Verification
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
+
+    console.log('Webhook Verifizierung:', { mode, token: token?.substring(0, 5) + '...', challenge });
 
     if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
       return res.status(200).send(challenge);
@@ -119,7 +96,8 @@ export default async function handler(req, res) {
 
     try {
       const { body } = req;
-      console.log('Webhook empfangen:', JSON.stringify(body, null, 2));
+      console.log('=== WEBHOOK PAYLOAD ===');
+      console.log(JSON.stringify(body, null, 2));
       
       if (body?.object === 'whatsapp_business_account') {
         const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -129,18 +107,45 @@ export default async function handler(req, res) {
           const from = message.from;
           
           if (text.startsWith('hey meta') && text.includes('message to')) {
-            console.log('Meta Befehl empfangen:', text);
+            console.log('=== META BEFEHL EMPFANGEN ===');
+            console.log('Text:', text);
+            console.log('Von:', from);
+            
             const content = text.split('message to')[1].trim();
             
-            // Starte asynchrone Verarbeitung
-            handleMessage(from, content).catch(error => {
-              console.error('Unbehandelter Fehler:', error);
-            });
+            try {
+              // Sende Bestätigung
+              console.log('Sende Bestätigung...');
+              await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+              
+              // Hole OpenAI Antwort
+              console.log('Hole OpenAI Antwort...');
+              const response = await getOpenAIResponse(content);
+              
+              // Sende Antwort
+              console.log('Sende finale Antwort...');
+              await sendWhatsAppMessage(from, response);
+              
+              console.log('=== VERARBEITUNG ABGESCHLOSSEN ===');
+            } catch (error) {
+              console.error('=== VERARBEITUNGSFEHLER ===');
+              console.error('Fehlertyp:', error.name);
+              console.error('Fehlermeldung:', error.message);
+              console.error('Stack:', error.stack);
+              
+              await sendWhatsAppMessage(from, 
+                'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
+                'Bitte versuchen Sie es später erneut.'
+              );
+            }
           }
         }
       }
     } catch (error) {
-      console.error('Webhook Fehler:', error);
+      console.error('=== WEBHOOK FEHLER ===');
+      console.error('Fehlertyp:', error.name);
+      console.error('Fehlermeldung:', error.message);
+      console.error('Stack:', error.stack);
     }
   }
 
