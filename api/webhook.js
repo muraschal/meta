@@ -2,7 +2,9 @@ import OpenAI from 'openai';
 import fetch from 'node-fetch';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 30000, // 30 Sekunden Timeout
+  maxRetries: 3
 });
 
 async function sendWhatsAppMessage(to, message) {
@@ -37,6 +39,25 @@ async function sendWhatsAppMessage(to, message) {
     return data;
   } catch (error) {
     console.error('Fehler beim Senden der WhatsApp Nachricht:', error);
+    throw error;
+  }
+}
+
+async function processOpenAIRequest(content) {
+  console.log('Verarbeite OpenAI Anfrage:', content);
+  
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Verwende ein schnelleres Modell
+      messages: [{ role: "user", content }],
+      max_tokens: 500,
+      temperature: 0.7
+    });
+
+    console.log('OpenAI Antwort erhalten');
+    return completion.choices[0].message.content;
+  } catch (error) {
+    console.error('OpenAI Fehler:', error);
     throw error;
   }
 }
@@ -93,84 +114,51 @@ export default async function handler(req, res) {
             try {
               const content = command.split('message to')[1].trim();
               console.log('Sende an OpenAI:', content);
-              console.log('OpenAI API Key vorhanden:', !!process.env.OPENAI_API_KEY);
-              console.log('OpenAI API Key Länge:', process.env.OPENAI_API_KEY?.length);
               
-              console.log('Starte OpenAI Anfrage...');
-              let completion;
-              try {
-                const abortController = new AbortController();
-                const timeout = setTimeout(() => abortController.abort(), 30000);
-                
-                completion = await openai.chat.completions.create({
-                  model: "gpt-4",
-                  messages: [{ role: "user", content }],
-                  max_tokens: 1000
-                }, {
-                  signal: abortController.signal
-                }).catch(error => {
-                  if (error.name === 'AbortError') {
-                    console.error('OpenAI Timeout nach 30 Sekunden');
-                    throw new Error('OpenAI Timeout nach 30 Sekunden');
-                  }
-                  throw error;
-                });
-                
-                clearTimeout(timeout);
-                console.log('OpenAI Completion erhalten');
-                
-                if (!completion?.choices?.[0]?.message?.content) {
-                  console.error('Ungültige OpenAI Antwort:', completion);
-                  throw new Error('Ungültige OpenAI Antwort');
-                }
-                
-                const response = completion.choices[0].message.content;
-                console.log('OpenAI Antwort:', response);
-                
-                console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
-                console.log('Meta Access Token Länge:', process.env.META_ACCESS_TOKEN?.length);
-                console.log('WhatsApp Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
-                
-                await sendWhatsAppMessage(from, response);
-              } catch (openaiError) {
-                console.error('OpenAI API Fehler:', {
-                  message: openaiError.message,
-                  name: openaiError.name,
-                  cause: openaiError.cause,
-                  stack: openaiError.stack
-                });
-                
-                // Sende eine Fehlermeldung an den Benutzer
-                const errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es später noch einmal.';
-                await sendWhatsAppMessage(from, errorMessage);
-                
-                throw openaiError;
-              }
+              // Sende sofort eine Bestätigung
+              await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+              
+              // Verarbeite die OpenAI-Anfrage
+              const response = await processOpenAIRequest(content);
+              console.log('OpenAI Antwort erhalten:', response);
+              
+              // Sende die Antwort
+              await sendWhatsAppMessage(from, response);
             } catch (error) {
-              console.error('Fehler bei der Verarbeitung des message to Befehls:', error);
-              throw error;
+              console.error('Fehler bei der Verarbeitung:', error);
+              await sendWhatsAppMessage(from, 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es später noch einmal.');
             }
           }
         }
 
         if (messageType === 'image') {
-          const imageUrl = message.image.url;
-          console.log('Bild empfangen:', imageUrl);
-          const completion = await openai.chat.completions.create({
-            model: "gpt-4-vision-preview",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Beschreibe dieses Bild" },
-                  { type: "image_url", image_url: imageUrl }
-                ],
-              },
-            ],
-          });
-          const response = completion.choices[0].message.content;
-          console.log('OpenAI Vision Antwort:', response);
-          await sendWhatsAppMessage(from, response);
+          try {
+            const imageUrl = message.image.url;
+            console.log('Bild empfangen:', imageUrl);
+            
+            // Sende sofort eine Bestätigung
+            await sendWhatsAppMessage(from, 'Ich analysiere das Bild...');
+            
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4-vision-preview",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Beschreibe dieses Bild" },
+                    { type: "image_url", image_url: imageUrl }
+                  ],
+                },
+              ],
+            });
+            
+            const response = completion.choices[0].message.content;
+            console.log('OpenAI Vision Antwort:', response);
+            await sendWhatsAppMessage(from, response);
+          } catch (error) {
+            console.error('Fehler bei der Bildverarbeitung:', error);
+            await sendWhatsAppMessage(from, 'Entschuldigung, es gab ein Problem bei der Verarbeitung des Bildes. Bitte versuchen Sie es später noch einmal.');
+          }
         }
       }
     } catch (error) {
