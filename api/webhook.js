@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 import fetch from 'node-fetch';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 30000 // 30 Sekunden Timeout
 });
 
 async function sendWhatsAppMessage(to, message) {
@@ -62,29 +63,58 @@ async function processOpenAIRequest(content) {
   console.log('OpenAI API Key (erste 10 Zeichen):', process.env.OPENAI_API_KEY?.substring(0, 10));
   
   try {
-    const completion = await openai.chat.completions.create({
+    console.log('Starte OpenAI API Aufruf...');
+    const requestBody = {
       model: "gpt-3.5-turbo",
       messages: [{ role: "user", content }],
       max_tokens: 500,
       temperature: 0.7
+    };
+    console.log('OpenAI Request Body:', JSON.stringify(requestBody, null, 2));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 Sekunden Timeout
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
 
-    console.log('OpenAI Rohantwort:', JSON.stringify(completion, null, 2));
+    clearTimeout(timeoutId);
+    console.log('OpenAI API Status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('OpenAI API Fehler:', errorData);
+      throw new Error(`OpenAI API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    console.log('OpenAI Rohantwort:', JSON.stringify(data, null, 2));
     
-    if (!completion?.choices?.[0]?.message?.content) {
-      console.error('Ungültige OpenAI Antwort:', completion);
+    if (!data.choices?.[0]?.message?.content) {
+      console.error('Ungültige OpenAI Antwort:', data);
       throw new Error('Ungültige OpenAI Antwort');
     }
 
-    const result = completion.choices[0].message.content;
+    const result = data.choices[0].message.content;
     console.log('Extrahierte OpenAI Antwort:', result);
     return result;
   } catch (error) {
     console.error('OpenAI Fehler:', {
       error: error.message,
       stack: error.stack,
-      cause: error.cause
+      cause: error.cause,
+      name: error.name
     });
+    if (error.name === 'AbortError') {
+      throw new Error('OpenAI Timeout nach 30 Sekunden');
+    }
     throw error;
   }
 }
