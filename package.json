@@ -2,11 +2,12 @@
   "name": "meta-glasses-bridge",
   "version": "1.0.0",
   "description": "Bridge between Meta Glasses and OpenAI",
+  "type": "module",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "vercel dev",
+    "start": "node api/health.js",
     "deploy": "vercel deploy --prod"
   },
   "dependencies": {
