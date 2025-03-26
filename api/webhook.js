@@ -1,5 +1,20 @@
 import OpenAI from 'openai';
 
+// Globales Error Handling
+process.on('unhandledRejection', (error) => {
+  console.error('=== UNHANDLED REJECTION ===');
+  console.error('Fehlertyp:', error.name);
+  console.error('Fehlermeldung:', error.message);
+  console.error('Stack:', error.stack);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('=== UNCAUGHT EXCEPTION ===');
+  console.error('Fehlertyp:', error.name);
+  console.error('Fehlermeldung:', error.message);
+  console.error('Stack:', error.stack);
+});
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -12,26 +27,37 @@ async function sendWhatsAppMessage(to, message) {
     console.log('Token:', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
     console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
 
-    const response = await fetch(
-      `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to,
-          type: 'text',
-          text: { body: message }
-        })
-      }
-    );
+    const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    console.log('URL:', url);
 
-    console.log('Status:', response.status);
-    const responseData = await response.text();
-    console.log('Antwort:', responseData);
+    const body = JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'text',
+      text: { body: message }
+    });
+    console.log('Request Body:', body);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body
+    }).catch(error => {
+      console.error('Fetch Fehler:', error);
+      throw error;
+    });
+
+    console.log('Response Status:', response.status);
+    console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+    
+    const responseData = await response.text().catch(error => {
+      console.error('Response Text Fehler:', error);
+      return 'Konnte Response nicht lesen';
+    });
+    console.log('Response Body:', responseData);
 
     if (!response.ok) {
       throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
@@ -43,6 +69,9 @@ async function sendWhatsAppMessage(to, message) {
     console.error('Fehlertyp:', error.name);
     console.error('Fehlermeldung:', error.message);
     console.error('Stack:', error.stack);
+    if (error.cause) {
+      console.error('Ursache:', error.cause);
+    }
     return false;
   }
 }
@@ -51,6 +80,7 @@ async function getOpenAIResponse(content) {
   try {
     console.log('=== OPENAI ANFRAGE ===');
     console.log('Inhalt:', content);
+    console.log('API Key vorhanden:', !!process.env.OPENAI_API_KEY);
     
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -67,6 +97,9 @@ async function getOpenAIResponse(content) {
     console.error('Fehlertyp:', error.name);
     console.error('Fehlermeldung:', error.message);
     console.error('Stack:', error.stack);
+    if (error.cause) {
+      console.error('Ursache:', error.cause);
+    }
     throw error;
   }
 }
@@ -74,6 +107,7 @@ async function getOpenAIResponse(content) {
 export default async function handler(req, res) {
   console.log('=== WEBHOOK HANDLER START ===');
   console.log('Methode:', req.method);
+  console.log('Headers:', req.headers);
   
   // Webhook Verification
   if (req.method === 'GET') {
@@ -116,15 +150,26 @@ export default async function handler(req, res) {
             try {
               // Sende Bestätigung
               console.log('Sende Bestätigung...');
-              await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+              const confirmSent = await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+              console.log('Bestätigung gesendet:', confirmSent);
+              
+              if (!confirmSent) {
+                throw new Error('Konnte Bestätigung nicht senden');
+              }
               
               // Hole OpenAI Antwort
               console.log('Hole OpenAI Antwort...');
               const response = await getOpenAIResponse(content);
+              console.log('OpenAI Antwort erhalten:', response);
               
               // Sende Antwort
               console.log('Sende finale Antwort...');
-              await sendWhatsAppMessage(from, response);
+              const finalSent = await sendWhatsAppMessage(from, response);
+              console.log('Finale Antwort gesendet:', finalSent);
+              
+              if (!finalSent) {
+                throw new Error('Konnte finale Antwort nicht senden');
+              }
               
               console.log('=== VERARBEITUNG ABGESCHLOSSEN ===');
             } catch (error) {
@@ -132,11 +177,16 @@ export default async function handler(req, res) {
               console.error('Fehlertyp:', error.name);
               console.error('Fehlermeldung:', error.message);
               console.error('Stack:', error.stack);
+              if (error.cause) {
+                console.error('Ursache:', error.cause);
+              }
               
               await sendWhatsAppMessage(from, 
                 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
                 'Bitte versuchen Sie es später erneut.'
-              );
+              ).catch(err => {
+                console.error('Fehler beim Senden der Fehlermeldung:', err);
+              });
             }
           }
         }
@@ -146,6 +196,9 @@ export default async function handler(req, res) {
       console.error('Fehlertyp:', error.name);
       console.error('Fehlermeldung:', error.message);
       console.error('Stack:', error.stack);
+      if (error.cause) {
+        console.error('Ursache:', error.cause);
+      }
     }
   }
 
