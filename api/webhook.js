@@ -96,17 +96,26 @@ export default async function handler(req, res) {
               console.log('OpenAI API Key vorhanden:', !!process.env.OPENAI_API_KEY);
               console.log('OpenAI API Key Länge:', process.env.OPENAI_API_KEY?.length);
               
-              const completion = await openai.chat.completions.create({
-                model: "gpt-4",
-                messages: [{ role: "user", content }],
-              }).catch(error => {
-                console.error('OpenAI API Fehler:', error.message);
-                throw error;
-              });
+              console.log('Starte OpenAI Anfrage...');
+              try {
+                const completion = await openai.chat.completions.create({
+                  model: "gpt-4",
+                  messages: [{ role: "user", content }],
+                  max_tokens: 1000
+                });
+                console.log('OpenAI Completion erhalten');
+                const response = completion.choices[0].message.content;
+                console.log('OpenAI Antwort:', response);
+              } catch (openaiError) {
+                console.error('OpenAI API Fehler:', openaiError);
+                console.error('OpenAI Error Details:', {
+                  message: openaiError.message,
+                  name: openaiError.name,
+                  stack: openaiError.stack
+                });
+                throw openaiError;
+              }
               
-              console.log('OpenAI Completion erhalten');
-              const response = completion.choices[0].message.content;
-              console.log('OpenAI Antwort:', response);
               console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
               console.log('Meta Access Token Länge:', process.env.META_ACCESS_TOKEN?.length);
               console.log('WhatsApp Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
