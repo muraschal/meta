@@ -42,25 +42,53 @@ async function sendWhatsAppMessage(to, message) {
   }
 }
 
-async function processOpenAIRequest(content) {
-  console.log('Verarbeite OpenAI Anfrage:', content);
+async function fetchWithTimeout(url, options, timeout = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   
   try {
-    // Einfachere OpenAI-Anfrage
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content }],
-        max_tokens: 500,
-        temperature: 0.7
-      })
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
 
+async function processOpenAIRequest(content) {
+  console.log('Verarbeite OpenAI Anfrage:', content);
+  console.log('OpenAI API Key (erste 10 Zeichen):', process.env.OPENAI_API_KEY?.substring(0, 10));
+  
+  const requestBody = {
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content }],
+    max_tokens: 500,
+    temperature: 0.7
+  };
+  
+  console.log('OpenAI Request Body:', JSON.stringify(requestBody, null, 2));
+  
+  try {
+    console.log('Starte OpenAI API Aufruf...');
+    const response = await fetchWithTimeout(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      },
+      10000 // 10 Sekunden Timeout
+    );
+    
+    console.log('OpenAI API Status:', response.status);
+    
     if (!response.ok) {
       const errorData = await response.json();
       console.error('OpenAI API Fehler:', errorData);
@@ -68,15 +96,21 @@ async function processOpenAIRequest(content) {
     }
 
     const data = await response.json();
-    console.log('OpenAI Rohantwort:', data);
+    console.log('OpenAI Rohantwort:', JSON.stringify(data, null, 2));
     
     if (!data.choices?.[0]?.message?.content) {
+      console.error('Ungültige OpenAI Antwort:', data);
       throw new Error('Ungültige OpenAI Antwort');
     }
 
-    return data.choices[0].message.content;
+    const result = data.choices[0].message.content;
+    console.log('Extrahierte OpenAI Antwort:', result);
+    return result;
   } catch (error) {
     console.error('OpenAI Fehler:', error);
+    if (error.name === 'AbortError') {
+      throw new Error('OpenAI Timeout nach 10 Sekunden');
+    }
     throw error;
   }
 }
@@ -145,7 +179,11 @@ export default async function handler(req, res) {
               await sendWhatsAppMessage(from, response);
             } catch (error) {
               console.error('Fehler bei der Verarbeitung:', error);
-              await sendWhatsAppMessage(from, 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es später noch einmal.');
+              let errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage.';
+              if (error.message.includes('Timeout')) {
+                errorMessage += ' Der Server antwortet nicht rechtzeitig.';
+              }
+              await sendWhatsAppMessage(from, errorMessage);
             }
           }
         }
@@ -158,26 +196,30 @@ export default async function handler(req, res) {
             // Sende sofort eine Bestätigung
             await sendWhatsAppMessage(from, 'Ich analysiere das Bild...');
             
-            // Direkte Anfrage an OpenAI Vision API
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
+            // Direkte Anfrage an OpenAI Vision API mit Timeout
+            const response = await fetchWithTimeout(
+              'https://api.openai.com/v1/chat/completions',
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: "gpt-4-vision-preview",
+                  messages: [
+                    {
+                      role: "user",
+                      content: [
+                        { type: "text", text: "Beschreibe dieses Bild" },
+                        { type: "image_url", image_url: imageUrl }
+                      ],
+                    },
+                  ],
+                })
               },
-              body: JSON.stringify({
-                model: "gpt-4-vision-preview",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      { type: "text", text: "Beschreibe dieses Bild" },
-                      { type: "image_url", image_url: imageUrl }
-                    ],
-                  },
-                ],
-              })
-            });
+              15000 // 15 Sekunden Timeout für Bildverarbeitung
+            );
 
             if (!response.ok) {
               const errorData = await response.json();
@@ -185,7 +227,7 @@ export default async function handler(req, res) {
             }
 
             const data = await response.json();
-            console.log('OpenAI Vision Rohantwort:', data);
+            console.log('OpenAI Vision Rohantwort:', JSON.stringify(data, null, 2));
             
             if (!data.choices?.[0]?.message?.content) {
               throw new Error('Ungültige OpenAI Vision Antwort');
@@ -196,7 +238,11 @@ export default async function handler(req, res) {
             await sendWhatsAppMessage(from, visionResponse);
           } catch (error) {
             console.error('Fehler bei der Bildverarbeitung:', error);
-            await sendWhatsAppMessage(from, 'Entschuldigung, es gab ein Problem bei der Verarbeitung des Bildes. Bitte versuchen Sie es später noch einmal.');
+            let errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung des Bildes.';
+            if (error.message.includes('Timeout')) {
+              errorMessage += ' Der Server antwortet nicht rechtzeitig.';
+            }
+            await sendWhatsAppMessage(from, errorMessage);
           }
         }
       }
