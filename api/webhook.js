@@ -1,46 +1,42 @@
 import OpenAI from 'openai';
-import fetch from 'node-fetch';
-import https from 'https';
-
-// Erstelle einen benutzerdefinierten HTTPS-Agent
-const agent = new https.Agent({
-  keepAlive: true,
-  timeout: 25000
-});
+import axios from 'axios';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 25000
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// Erstelle einen axios-Client mit Standardkonfiguration
+const whatsappClient = axios.create({
+  baseURL: 'https://graph.facebook.com/v17.0',
+  timeout: 10000,
+  headers: {
+    'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+    'Content-Type': 'application/json'
+  }
 });
 
 async function sendWhatsAppMessage(to, message) {
-  const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  
-  const options = {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message }
-    })
-  };
-
   try {
     console.log(`Sende Nachricht an ${to}`);
-    const response = await fetch(url, options);
     
-    if (!response.ok) {
-      throw new Error(`WhatsApp API Fehler: ${response.status}`);
-    }
+    const response = await whatsappClient.post(
+      `/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: message }
+      }
+    );
     
+    console.log('WhatsApp Antwort:', response.status);
     return true;
   } catch (error) {
-    console.error('WhatsApp Fehler:', error.message);
+    console.error('WhatsApp Fehler:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
     return false;
   }
 }
@@ -53,8 +49,7 @@ async function getOpenAIResponse(content) {
       model: "gpt-3.5-turbo",
       messages: [{ role: "user", content }],
       max_tokens: 150,
-      temperature: 0.7,
-      timeout: 20000
+      temperature: 0.7
     });
 
     return completion?.choices?.[0]?.message?.content || 'Keine Antwort von OpenAI erhalten';
@@ -67,14 +62,17 @@ async function getOpenAIResponse(content) {
 async function handleMessage(from, content) {
   try {
     // Sende Bestätigung
-    await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+    const confirmSent = await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+    if (!confirmSent) {
+      throw new Error('Konnte Bestätigung nicht senden');
+    }
     
-    // Hole OpenAI Antwort
+    // Hole OpenAI Antwort mit Timeout
     console.log('Starte OpenAI Anfrage');
     const response = await Promise.race([
       getOpenAIResponse(content),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 20000)
+        setTimeout(() => reject(new Error('Timeout')), 15000)
       )
     ]);
     
@@ -92,7 +90,7 @@ async function handleMessage(from, content) {
     await sendWhatsAppMessage(from, 
       'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
       (error.message === 'Timeout' ? 'Die Anfrage hat zu lange gedauert.' : 'Bitte versuchen Sie es später erneut.')
-    );
+    ).catch(console.error);
   }
 }
 
