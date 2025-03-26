@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
 import fetch from 'node-fetch';
+import https from 'https';
+
+const agent = new https.Agent({
+  rejectUnauthorized: false // In Produktion sollte dies auf true gesetzt sein
+});
 
 // Einfachere OpenAI-Konfiguration
 const openai = new OpenAI({
@@ -24,7 +29,9 @@ async function sendWhatsAppMessage(to, message) {
         to,
         type: 'text',
         text: { body: message }
-      })
+      }),
+      agent: agent,
+      timeout: 8000 // 8 Sekunden Timeout
     });
     
     if (!response.ok) {
@@ -49,7 +56,9 @@ async function fetchWithTimeout(url, options, timeout = 10000) {
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
+      agent: agent,
+      timeout: timeout
     });
     clearTimeout(timeoutId);
     return response;
