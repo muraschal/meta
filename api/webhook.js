@@ -97,30 +97,55 @@ export default async function handler(req, res) {
               console.log('OpenAI API Key Länge:', process.env.OPENAI_API_KEY?.length);
               
               console.log('Starte OpenAI Anfrage...');
+              let completion;
               try {
-                const completion = await openai.chat.completions.create({
+                const abortController = new AbortController();
+                const timeout = setTimeout(() => abortController.abort(), 30000);
+                
+                completion = await openai.chat.completions.create({
                   model: "gpt-4",
                   messages: [{ role: "user", content }],
                   max_tokens: 1000
+                }, {
+                  signal: abortController.signal
+                }).catch(error => {
+                  if (error.name === 'AbortError') {
+                    console.error('OpenAI Timeout nach 30 Sekunden');
+                    throw new Error('OpenAI Timeout nach 30 Sekunden');
+                  }
+                  throw error;
                 });
+                
+                clearTimeout(timeout);
                 console.log('OpenAI Completion erhalten');
+                
+                if (!completion?.choices?.[0]?.message?.content) {
+                  console.error('Ungültige OpenAI Antwort:', completion);
+                  throw new Error('Ungültige OpenAI Antwort');
+                }
+                
                 const response = completion.choices[0].message.content;
                 console.log('OpenAI Antwort:', response);
+                
+                console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
+                console.log('Meta Access Token Länge:', process.env.META_ACCESS_TOKEN?.length);
+                console.log('WhatsApp Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+                
+                await sendWhatsAppMessage(from, response);
               } catch (openaiError) {
-                console.error('OpenAI API Fehler:', openaiError);
-                console.error('OpenAI Error Details:', {
+                console.error('OpenAI API Fehler:', {
                   message: openaiError.message,
                   name: openaiError.name,
+                  cause: openaiError.cause,
                   stack: openaiError.stack
                 });
+                
+                // Sende eine Fehlermeldung an den Benutzer
+                const errorMessage = 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es später noch einmal.';
+                await sendWhatsAppMessage(from, errorMessage);
+                
                 throw openaiError;
               }
-              
-              console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
-              console.log('Meta Access Token Länge:', process.env.META_ACCESS_TOKEN?.length);
-              console.log('WhatsApp Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
-              
-              await sendWhatsAppMessage(from, response);
             } catch (error) {
               console.error('Fehler bei der Verarbeitung des message to Befehls:', error);
               throw error;
