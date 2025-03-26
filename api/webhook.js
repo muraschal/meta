@@ -77,12 +77,16 @@ export default async function handler(req, res) {
           if (command.includes('message to')) {
             const content = command.split('message to')[1].trim();
             console.log('Sende an OpenAI:', content);
+            console.log('OpenAI API Key vorhanden:', !!process.env.OPENAI_API_KEY);
             const completion = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [{ role: "user", content }],
             });
+            console.log('OpenAI Completion erhalten');
             const response = completion.choices[0].message.content;
             console.log('OpenAI Antwort:', response);
+            console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
+            console.log('WhatsApp Phone Number ID vorhanden:', !!process.env.WHATSAPP_PHONE_NUMBER_ID);
             await sendWhatsAppMessage(from, response);
           }
         }
