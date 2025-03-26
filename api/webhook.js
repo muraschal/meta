@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import fetch from 'node-fetch';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -8,6 +9,9 @@ async function sendWhatsAppMessage(to, message) {
   const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
   try {
     console.log('Sende WhatsApp Nachricht:', { to, message });
+    console.log('Verwende URL:', url);
+    console.log('Mit Token:', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -25,7 +29,7 @@ async function sendWhatsAppMessage(to, message) {
     if (!response.ok) {
       const errorData = await response.json();
       console.error('WhatsApp API Fehler:', errorData);
-      throw new Error(`WhatsApp API Fehler: ${response.status}`);
+      throw new Error(`WhatsApp API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
     }
     
     const data = await response.json();
@@ -38,10 +42,14 @@ async function sendWhatsAppMessage(to, message) {
 }
 
 export default async function handler(req, res) {
+  console.log('Handler aufgerufen mit Methode:', req.method);
+  
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
+
+    console.log('Webhook Verifizierung:', { mode, token: token?.substring(0, 5) + '...', challenge });
 
     if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
       console.log('Webhook wurde verifiziert');
@@ -51,6 +59,8 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    console.log('POST Request Headers:', req.headers);
+    
     try {
       const { body } = req;
       console.log('Webhook POST empfangen:', JSON.stringify(body, null, 2));
@@ -131,6 +141,7 @@ export default async function handler(req, res) {
       }
     } catch (error) {
       console.error('Fehler bei der Webhook-Verarbeitung:', error);
+      console.error('Stack Trace:', error.stack);
     }
     return;
   }
