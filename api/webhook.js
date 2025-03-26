@@ -6,7 +6,8 @@ import https from 'https';
 const agent = new https.Agent({
   rejectUnauthorized: false, // In Produktion sollte dies auf true gesetzt sein
   keepAlive: true,
-  timeout: 30000
+  timeout: 30000,
+  secureProtocol: 'TLSv1_2_method'
 });
 
 const openai = new OpenAI({
@@ -34,7 +35,8 @@ async function sendWhatsAppMessage(to, message) {
         text: { body: message }
       }),
       agent: agent,
-      timeout: 30000
+      timeout: 30000,
+      compress: false
     });
     
     const responseText = await response.text();
