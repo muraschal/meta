@@ -59,35 +59,53 @@ export default async function handler(req, res) {
       res.status(200).send('OK');
 
       if (body.object === 'whatsapp_business_account') {
+        console.log('WhatsApp Business Account Nachricht erkannt');
         const entry = body.entry[0];
         const changes = entry.changes[0];
         const value = changes.value;
         const messages = value.messages;
 
-        if (!messages) return;
+        if (!messages) {
+          console.log('Keine Nachrichten im Payload gefunden');
+          return;
+        }
 
         const message = messages[0];
         const from = message.from;
         const messageType = message.type;
+        console.log('Nachricht Details:', { from, messageType, body: message.text?.body });
 
         if (messageType === 'text' && message.text.body.toLowerCase().startsWith('hey meta')) {
           const command = message.text.body.toLowerCase();
           console.log('Meta Glasses Befehl empfangen:', command);
 
           if (command.includes('message to')) {
-            const content = command.split('message to')[1].trim();
-            console.log('Sende an OpenAI:', content);
-            console.log('OpenAI API Key vorhanden:', !!process.env.OPENAI_API_KEY);
-            const completion = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [{ role: "user", content }],
-            });
-            console.log('OpenAI Completion erhalten');
-            const response = completion.choices[0].message.content;
-            console.log('OpenAI Antwort:', response);
-            console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
-            console.log('WhatsApp Phone Number ID vorhanden:', !!process.env.WHATSAPP_PHONE_NUMBER_ID);
-            await sendWhatsAppMessage(from, response);
+            try {
+              const content = command.split('message to')[1].trim();
+              console.log('Sende an OpenAI:', content);
+              console.log('OpenAI API Key vorhanden:', !!process.env.OPENAI_API_KEY);
+              console.log('OpenAI API Key Länge:', process.env.OPENAI_API_KEY?.length);
+              
+              const completion = await openai.chat.completions.create({
+                model: "gpt-4",
+                messages: [{ role: "user", content }],
+              }).catch(error => {
+                console.error('OpenAI API Fehler:', error.message);
+                throw error;
+              });
+              
+              console.log('OpenAI Completion erhalten');
+              const response = completion.choices[0].message.content;
+              console.log('OpenAI Antwort:', response);
+              console.log('Meta Access Token vorhanden:', !!process.env.META_ACCESS_TOKEN);
+              console.log('Meta Access Token Länge:', process.env.META_ACCESS_TOKEN?.length);
+              console.log('WhatsApp Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+              
+              await sendWhatsAppMessage(from, response);
+            } catch (error) {
+              console.error('Fehler bei der Verarbeitung des message to Befehls:', error);
+              throw error;
+            }
           }
         }
 
