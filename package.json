@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Bridge between Meta Glasses and OpenAI",
   "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
@@ -15,7 +18,8 @@
     "ws": "^8.14.2",
     "openai": "^4.24.1",
     "dotenv": "^16.3.1",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "@vercel/node": "^3.0.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

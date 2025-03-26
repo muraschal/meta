@@ -10,39 +10,43 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Webhook-Route
-app.use('/webhook', whatsappWebhook);
-
-// Health check route
+// Basic routes
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Apollo Server Setup
-const apolloServer = new ApolloServer({
-  typeDefs,
-  resolvers,
-  context: ({ req }) => ({
-    // Kontext für GraphQL-Operationen
-  })
-});
+// Webhook-Route
+app.use('/webhook', whatsappWebhook);
+
+let apolloServer = null;
+async function initApollo() {
+  apolloServer = new ApolloServer({
+    typeDefs,
+    resolvers,
+    context: ({ req }) => ({
+      // Kontext für GraphQL-Operationen
+    })
+  });
+  await apolloServer.start();
+  apolloServer.applyMiddleware({ app });
+  return apolloServer;
+}
 
 // Vercel-spezifische Anpassungen
 const port = process.env.PORT || 3000;
 
-async function startServer() {
-  await apolloServer.start();
-  apolloServer.applyMiddleware({ app });
-
-  if (process.env.NODE_ENV !== 'production') {
+// Nur im Development-Modus den Server starten
+if (process.env.NODE_ENV !== 'production') {
+  initApollo().then(() => {
     app.listen(port, () => {
       console.log(`Server läuft auf Port ${port}`);
       console.log(`GraphQL Endpoint: http://localhost:${port}${apolloServer.graphqlPath}`);
     });
-  }
+  }).catch(console.error);
+} else {
+  // Im Produktionsmodus Apollo Server nur initialisieren
+  initApollo().catch(console.error);
 }
-
-startServer().catch(console.error);
 
 // Für Vercel Serverless Functions
 module.exports = app; 
