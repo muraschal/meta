@@ -2,13 +2,11 @@
   "version": 2,
   "functions": {
     "api/*.js": {
-      "memory": 3008,
-      "maxDuration": 60
+      "memory": 1024,
+      "maxDuration": 10
     }
   },
-  "build": {
-    "env": {
-      "NODE_VERSION": "20.x"
-    }
+  "env": {
+    "NODE_ENV": "production"
   }
 } 
