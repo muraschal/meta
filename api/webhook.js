@@ -1,10 +1,9 @@
 import OpenAI from 'openai';
 import fetch from 'node-fetch';
 
+// Einfachere OpenAI-Konfiguration
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 30000, // 30 Sekunden Timeout
-  maxRetries: 3
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 async function sendWhatsAppMessage(to, message) {
@@ -47,15 +46,35 @@ async function processOpenAIRequest(content) {
   console.log('Verarbeite OpenAI Anfrage:', content);
   
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Verwende ein schnelleres Modell
-      messages: [{ role: "user", content }],
-      max_tokens: 500,
-      temperature: 0.7
+    // Einfachere OpenAI-Anfrage
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content }],
+        max_tokens: 500,
+        temperature: 0.7
+      })
     });
 
-    console.log('OpenAI Antwort erhalten');
-    return completion.choices[0].message.content;
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('OpenAI API Fehler:', errorData);
+      throw new Error(`OpenAI API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    console.log('OpenAI Rohantwort:', data);
+    
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('Ungültige OpenAI Antwort');
+    }
+
+    return data.choices[0].message.content;
   } catch (error) {
     console.error('OpenAI Fehler:', error);
     throw error;
@@ -139,22 +158,42 @@ export default async function handler(req, res) {
             // Sende sofort eine Bestätigung
             await sendWhatsAppMessage(from, 'Ich analysiere das Bild...');
             
-            const completion = await openai.chat.completions.create({
-              model: "gpt-4-vision-preview",
-              messages: [
-                {
-                  role: "user",
-                  content: [
-                    { type: "text", text: "Beschreibe dieses Bild" },
-                    { type: "image_url", image_url: imageUrl }
-                  ],
-                },
-              ],
+            // Direkte Anfrage an OpenAI Vision API
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: "gpt-4-vision-preview",
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: "Beschreibe dieses Bild" },
+                      { type: "image_url", image_url: imageUrl }
+                    ],
+                  },
+                ],
+              })
             });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(`OpenAI Vision API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
+            }
+
+            const data = await response.json();
+            console.log('OpenAI Vision Rohantwort:', data);
             
-            const response = completion.choices[0].message.content;
-            console.log('OpenAI Vision Antwort:', response);
-            await sendWhatsAppMessage(from, response);
+            if (!data.choices?.[0]?.message?.content) {
+              throw new Error('Ungültige OpenAI Vision Antwort');
+            }
+
+            const visionResponse = data.choices[0].message.content;
+            console.log('OpenAI Vision Antwort:', visionResponse);
+            await sendWhatsAppMessage(from, visionResponse);
           } catch (error) {
             console.error('Fehler bei der Bildverarbeitung:', error);
             await sendWhatsAppMessage(from, 'Entschuldigung, es gab ein Problem bei der Verarbeitung des Bildes. Bitte versuchen Sie es später noch einmal.');
