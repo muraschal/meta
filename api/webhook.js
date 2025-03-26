@@ -6,20 +6,35 @@ const openai = new OpenAI({
 
 async function sendWhatsAppMessage(to, message) {
   const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message }
-    })
-  });
-  return response.json();
+  try {
+    console.log('Sende WhatsApp Nachricht:', { to, message });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: message }
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('WhatsApp API Fehler:', errorData);
+      throw new Error(`WhatsApp API Fehler: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('WhatsApp Antwort:', data);
+    return data;
+  } catch (error) {
+    console.error('Fehler beim Senden der WhatsApp Nachricht:', error);
+    throw error;
+  }
 }
 
 export default async function handler(req, res) {
@@ -38,6 +53,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const { body } = req;
+      console.log('Webhook POST empfangen:', JSON.stringify(body, null, 2));
       
       // Bestätigen Sie den Webhook-Empfang sofort
       res.status(200).send('OK');
@@ -60,16 +76,20 @@ export default async function handler(req, res) {
 
           if (command.includes('message to')) {
             const content = command.split('message to')[1].trim();
+            console.log('Sende an OpenAI:', content);
             const completion = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [{ role: "user", content }],
             });
-            await sendWhatsAppMessage(from, completion.choices[0].message.content);
+            const response = completion.choices[0].message.content;
+            console.log('OpenAI Antwort:', response);
+            await sendWhatsAppMessage(from, response);
           }
         }
 
         if (messageType === 'image') {
           const imageUrl = message.image.url;
+          console.log('Bild empfangen:', imageUrl);
           const completion = await openai.chat.completions.create({
             model: "gpt-4-vision-preview",
             messages: [
@@ -82,7 +102,9 @@ export default async function handler(req, res) {
               },
             ],
           });
-          await sendWhatsAppMessage(from, completion.choices[0].message.content);
+          const response = completion.choices[0].message.content;
+          console.log('OpenAI Vision Antwort:', response);
+          await sendWhatsAppMessage(from, response);
         }
       }
     } catch (error) {
