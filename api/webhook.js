@@ -1,5 +1,13 @@
 import OpenAI from 'openai';
 import fetch from 'node-fetch';
+import https from 'https';
+
+// Erstelle einen benutzerdefinierten HTTPS-Agent
+const agent = new https.Agent({
+  rejectUnauthorized: false, // In Produktion sollte dies auf true gesetzt sein
+  keepAlive: true,
+  timeout: 30000
+});
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -24,7 +32,9 @@ async function sendWhatsAppMessage(to, message) {
         to,
         type: 'text',
         text: { body: message }
-      })
+      }),
+      agent: agent,
+      timeout: 30000
     });
     
     const responseText = await response.text();
@@ -52,7 +62,9 @@ async function sendWhatsAppMessage(to, message) {
     console.error('Fehler beim Senden der WhatsApp Nachricht:', {
       error: error.message,
       stack: error.stack,
-      cause: error.cause
+      cause: error.cause,
+      code: error.code,
+      errno: error.errno
     });
     throw error;
   }

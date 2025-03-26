@@ -1,22 +1,21 @@
 {
-  "name": "meta-glasses-bridge",
+  "name": "meta",
   "version": "1.0.0",
-  "description": "Bridge between Meta Glasses and OpenAI",
-  "type": "module",
+  "description": "",
+  "main": "index.js",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node api/health.js",
-    "deploy": "vercel deploy --prod"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "openai": "^4.24.1",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.4.5",
+    "https": "^1.0.0",
     "node-fetch": "^3.3.2",
-    "https": "^1.0.0"
-  },
-  "devDependencies": {
-    "vercel": "^33.5.1"
+    "openai": "^4.28.0"
   }
 } 
