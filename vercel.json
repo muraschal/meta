@@ -2,22 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/index.js",
+      "src": "api/**/*.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/webhook(.*)",
-      "dest": "src/index.js"
+      "src": "/health",
+      "dest": "/api/health.js"
     },
     {
-      "src": "/graphql",
-      "dest": "src/index.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "src/index.js"
+      "src": "/webhook",
+      "dest": "/api/webhook.js"
     }
   ],
   "env": {
