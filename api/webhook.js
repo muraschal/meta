@@ -1,12 +1,6 @@
 import OpenAI from 'openai';
 import fetch from 'node-fetch';
-import https from 'https';
 
-const agent = new https.Agent({
-  rejectUnauthorized: false // In Produktion sollte dies auf true gesetzt sein
-});
-
-// Einfachere OpenAI-Konfiguration
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -29,41 +23,36 @@ async function sendWhatsAppMessage(to, message) {
         to,
         type: 'text',
         text: { body: message }
-      }),
-      agent: agent,
-      timeout: 8000 // 8 Sekunden Timeout
+      })
     });
+    
+    const responseText = await response.text();
+    console.log('WhatsApp API Rohantwort:', responseText);
     
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('WhatsApp API Fehler:', errorData);
-      throw new Error(`WhatsApp API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
+      console.error('WhatsApp API Fehler:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: responseText
+      });
+      throw new Error(`WhatsApp API Fehler: ${response.status}`);
     }
     
-    const data = await response.json();
-    console.log('WhatsApp Antwort:', data);
-    return data;
+    try {
+      const data = JSON.parse(responseText);
+      console.log('WhatsApp Antwort (parsed):', data);
+      return data;
+    } catch (parseError) {
+      console.error('Fehler beim Parsen der WhatsApp-Antwort:', parseError);
+      return { raw: responseText };
+    }
   } catch (error) {
-    console.error('Fehler beim Senden der WhatsApp Nachricht:', error);
-    throw error;
-  }
-}
-
-async function fetchWithTimeout(url, options, timeout = 10000) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      agent: agent,
-      timeout: timeout
+    console.error('Fehler beim Senden der WhatsApp Nachricht:', {
+      error: error.message,
+      stack: error.stack,
+      cause: error.cause
     });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
     throw error;
   }
 }
@@ -72,54 +61,30 @@ async function processOpenAIRequest(content) {
   console.log('Verarbeite OpenAI Anfrage:', content);
   console.log('OpenAI API Key (erste 10 Zeichen):', process.env.OPENAI_API_KEY?.substring(0, 10));
   
-  const requestBody = {
-    model: "gpt-3.5-turbo",
-    messages: [{ role: "user", content }],
-    max_tokens: 500,
-    temperature: 0.7
-  };
-  
-  console.log('OpenAI Request Body:', JSON.stringify(requestBody, null, 2));
-  
   try {
-    console.log('Starte OpenAI API Aufruf...');
-    const response = await fetchWithTimeout(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      },
-      10000 // 10 Sekunden Timeout
-    );
-    
-    console.log('OpenAI API Status:', response.status);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API Fehler:', errorData);
-      throw new Error(`OpenAI API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
-    }
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content }],
+      max_tokens: 500,
+      temperature: 0.7
+    });
 
-    const data = await response.json();
-    console.log('OpenAI Rohantwort:', JSON.stringify(data, null, 2));
+    console.log('OpenAI Rohantwort:', JSON.stringify(completion, null, 2));
     
-    if (!data.choices?.[0]?.message?.content) {
-      console.error('Ungültige OpenAI Antwort:', data);
+    if (!completion?.choices?.[0]?.message?.content) {
+      console.error('Ungültige OpenAI Antwort:', completion);
       throw new Error('Ungültige OpenAI Antwort');
     }
 
-    const result = data.choices[0].message.content;
+    const result = completion.choices[0].message.content;
     console.log('Extrahierte OpenAI Antwort:', result);
     return result;
   } catch (error) {
-    console.error('OpenAI Fehler:', error);
-    if (error.name === 'AbortError') {
-      throw new Error('OpenAI Timeout nach 10 Sekunden');
-    }
+    console.error('OpenAI Fehler:', {
+      error: error.message,
+      stack: error.stack,
+      cause: error.cause
+    });
     throw error;
   }
 }
@@ -192,7 +157,7 @@ export default async function handler(req, res) {
               if (error.message.includes('Timeout')) {
                 errorMessage += ' Der Server antwortet nicht rechtzeitig.';
               }
-              await sendWhatsAppMessage(from, errorMessage);
+              await sendWhatsAppMessage(from, errorMessage).catch(console.error);
             }
           }
         }
@@ -205,44 +170,26 @@ export default async function handler(req, res) {
             // Sende sofort eine Bestätigung
             await sendWhatsAppMessage(from, 'Ich analysiere das Bild...');
             
-            // Direkte Anfrage an OpenAI Vision API mit Timeout
-            const response = await fetchWithTimeout(
-              'https://api.openai.com/v1/chat/completions',
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: "gpt-4-vision-preview",
-                  messages: [
-                    {
-                      role: "user",
-                      content: [
-                        { type: "text", text: "Beschreibe dieses Bild" },
-                        { type: "image_url", image_url: imageUrl }
-                      ],
-                    },
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4-vision-preview",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Beschreibe dieses Bild" },
+                    { type: "image_url", image_url: imageUrl }
                   ],
-                })
-              },
-              15000 // 15 Sekunden Timeout für Bildverarbeitung
-            );
+                },
+              ],
+            });
 
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(`OpenAI Vision API Fehler: ${response.status} - ${JSON.stringify(errorData)}`);
-            }
-
-            const data = await response.json();
-            console.log('OpenAI Vision Rohantwort:', JSON.stringify(data, null, 2));
+            console.log('OpenAI Vision Rohantwort:', JSON.stringify(completion, null, 2));
             
-            if (!data.choices?.[0]?.message?.content) {
+            if (!completion?.choices?.[0]?.message?.content) {
               throw new Error('Ungültige OpenAI Vision Antwort');
             }
 
-            const visionResponse = data.choices[0].message.content;
+            const visionResponse = completion.choices[0].message.content;
             console.log('OpenAI Vision Antwort:', visionResponse);
             await sendWhatsAppMessage(from, visionResponse);
           } catch (error) {
@@ -251,7 +198,7 @@ export default async function handler(req, res) {
             if (error.message.includes('Timeout')) {
               errorMessage += ' Der Server antwortet nicht rechtzeitig.';
             }
-            await sendWhatsAppMessage(from, errorMessage);
+            await sendWhatsAppMessage(from, errorMessage).catch(console.error);
           }
         }
       }
