@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import https from 'https';
-import { addLog } from './webhook/logs';
+import { addLog } from './utils/logs';
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
@@ -167,6 +167,21 @@ export default async function handler(req, res) {
     addLog(`Methode: ${req.method}`, 'info');
     addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, 'info');
 
+    // Prüfe Umgebungsvariablen
+    const requiredEnvVars = [
+      'WEBHOOK_VERIFY_TOKEN',
+      'META_ACCESS_TOKEN',
+      'WHATSAPP_PHONE_NUMBER_ID',
+      'WHATSAPP_BUSINESS_ACCOUNT_ID',
+      'OPENAI_API_KEY'
+    ];
+
+    const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    if (missingEnvVars.length > 0) {
+      addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, 'error');
+      throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
+    }
+
     // Webhook Verification
     if (req.method === 'GET') {
       addLog('Webhook-Verifizierung gestartet', 'info');
@@ -174,13 +189,20 @@ export default async function handler(req, res) {
       const token = req.query['hub.verify_token'];
       const challenge = req.query['hub.challenge'];
 
-      console.log('Webhook Verifizierung:', { mode, token: token?.substring(0, 5) + '...', challenge });
+      addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, 'info');
+
+      if (!mode || !token) {
+        addLog('Fehlende Verifizierungsparameter', 'error');
+        return res.status(400).json({ error: 'Fehlende Parameter' });
+      }
 
       if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
         addLog('Webhook erfolgreich verifiziert', 'success');
         return res.status(200).send(challenge);
       }
-      return res.status(403).end();
+
+      addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', 'error');
+      return res.status(403).json({ error: 'Ungültiger Token' });
     }
 
     // Webhook Handler
@@ -268,10 +290,19 @@ export default async function handler(req, res) {
     return res.status(405).end();
   } catch (error) {
     addLog(`Webhook-Fehler: ${error.message}`, 'error');
+    addLog(`Stack: ${error.stack}`, 'error');
     console.error('Webhook-Fehler:', error);
-    return res.status(500).json({ 
+    
+    // Sende detaillierte Fehlerinformationen nur in der Entwicklungsumgebung
+    const errorResponse = {
       error: 'Interner Serverfehler',
-      message: error.message 
-    });
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten'
+    };
+    
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.stack = error.stack;
+    }
+    
+    return res.status(500).json(errorResponse);
   }
 } 
