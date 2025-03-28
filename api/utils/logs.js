@@ -1,4 +1,4 @@
-let logs = [];
+export let logs = [];
 const MAX_LOGS = 100;
 
 export function addLog(message, type = 'info') {
@@ -10,6 +10,9 @@ export function addLog(message, type = 'info') {
     if (logs.length > MAX_LOGS) {
         logs = logs.slice(0, MAX_LOGS);
     }
+
+    // Log auch in der Konsole ausgeben
+    console.log(logEntry);
 }
 
 export default async function handler(req, res) {

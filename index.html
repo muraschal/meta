@@ -499,7 +499,7 @@
                 }
 
                 // System Logs
-                const logsResponse = await fetch('/api/webhook/logs');
+                const logsResponse = await fetch('/api/logs');
                 const logsStatus = document.getElementById('logs-status');
                 const logsText = document.getElementById('logs-text');
                 
@@ -507,25 +507,29 @@
                     const logs = await logsResponse.json();
                     logsStatus.className = 'status-indicator status-ok';
                     
-                    // Format logs with colors
-                    const formattedLogs = logs.map(log => {
-                        if (log.includes('ERROR') || log.includes('FEHLER')) {
-                            return `<span class="log-error">${log}</span>`;
-                        } else if (log.includes('SUCCESS') || log.includes('ERFOLG')) {
-                            return `<span class="log-success">${log}</span>`;
-                        } else if (log.includes('===')) {
-                            return `<div class="log-section">${log}</div>`;
-                        } else if (log.includes('WARNING') || log.includes('WARNUNG')) {
-                            return `<span class="log-warning">${log}</span>`;
-                        } else {
-                            return log;
-                        }
-                    }).join('\n');
-                    
-                    logsText.innerHTML = formattedLogs;
+                    if (logs && logs.length > 0) {
+                        // Format logs with colors
+                        const formattedLogs = logs.map(log => {
+                            if (log.includes('ERROR') || log.includes('FEHLER')) {
+                                return `<span class="log-error">${log}</span>`;
+                            } else if (log.includes('SUCCESS') || log.includes('ERFOLG')) {
+                                return `<span class="log-success">${log}</span>`;
+                            } else if (log.includes('===')) {
+                                return `<div class="log-section">${log}</div>`;
+                            } else if (log.includes('WARNING') || log.includes('WARNUNG')) {
+                                return `<span class="log-warning">${log}</span>`;
+                            } else {
+                                return `<span class="log-info">${log}</span>`;
+                            }
+                        }).join('\n');
+                        
+                        logsText.innerHTML = formattedLogs;
+                    } else {
+                        logsText.innerHTML = '<span class="log-info">Noch keine Logs vorhanden</span>';
+                    }
                 } else {
                     logsStatus.className = 'status-indicator status-error';
-                    logsText.innerHTML = '<span class="log-error">Keine Logs verfügbar</span>';
+                    logsText.innerHTML = '<span class="log-error">Fehler beim Laden der Logs</span>';
                 }
 
                 // Update timestamp
