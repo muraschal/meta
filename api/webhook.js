@@ -41,19 +41,20 @@ async function sendWhatsAppMessage(to, message) {
     console.log('=== SENDE WHATSAPP NACHRICHT ===');
     console.log('An:', to);
     console.log('Nachricht:', message);
-    console.log('Token:', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
+    console.log('Token (erste 10 Zeichen):', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
     console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+    console.log('Business Account ID:', process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
 
     const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
     console.log('URL:', url);
 
-    const body = JSON.stringify({
+    const requestBody = {
       messaging_product: 'whatsapp',
       to,
       type: 'text',
       text: { body: message }
-    });
-    console.log('Request Body:', body);
+    };
+    console.log('Request Body:', JSON.stringify(requestBody, null, 2));
 
     const response = await fetchWithTimeout(url, {
       method: 'POST',
@@ -61,7 +62,7 @@ async function sendWhatsAppMessage(to, message) {
         'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body
+      body: JSON.stringify(requestBody)
     });
 
     console.log('Response Status:', response.status);
@@ -71,6 +72,14 @@ async function sendWhatsAppMessage(to, message) {
     console.log('Response Body:', responseData);
 
     if (!response.ok) {
+      const errorData = JSON.parse(responseData);
+      console.error('WhatsApp API Fehler Details:', {
+        code: errorData.error?.code,
+        subcode: errorData.error?.error_subcode,
+        message: errorData.error?.message,
+        type: errorData.error?.type,
+        fbtrace_id: errorData.error?.fbtrace_id
+      });
       throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
     }
 
