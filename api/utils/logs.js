@@ -1,9 +1,25 @@
+// In-Memory Log-Speicher
 export let logs = [];
 const MAX_LOGS = 100;
 
-export function addLog(message, type = 'info') {
+// Log-Typen
+export const LogType = {
+    INFO: 'info',
+    ERROR: 'error',
+    WARNING: 'warning',
+    SUCCESS: 'success'
+};
+
+/**
+ * Fügt einen neuen Log-Eintrag hinzu
+ * @param {string} message - Die Log-Nachricht
+ * @param {string} type - Der Log-Typ (info, error, warning, success)
+ */
+export function addLog(message, type = LogType.INFO) {
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+    
+    // Füge den Log am Anfang der Liste hinzu
     logs.unshift(logEntry);
     
     // Begrenze die Anzahl der Logs

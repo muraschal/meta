@@ -343,58 +343,9 @@
 
         async function checkStatus() {
             try {
-                await Promise.all([
-                    updateSystemInfo(),
-                    // Webhook Status
-                    fetch('/api/webhook?hub.mode=subscribe&hub.verify_token=meta_glasses_bridge_verify_2024'),
-                    // WhatsApp API Status
-                    fetch('/api/webhook', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            object: 'whatsapp_business_account',
-                            entry: [{
-                                id: '1233067364910106',
-                                changes: [{
-                                    value: {
-                                        messaging_product: 'whatsapp',
-                                        metadata: {
-                                            display_phone_number: '15556454549',
-                                            phone_number_id: '637450429443686'
-                                        }
-                                    }
-                                }]
-                            }]
-                        })
-                    }),
-                    // OpenAI Status
-                    fetch('/api/webhook', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            object: 'whatsapp_business_account',
-                            entry: [{
-                                id: '1233067364910106',
-                                changes: [{
-                                    value: {
-                                        messaging_product: 'whatsapp',
-                                        messages: [{
-                                            from: '41765669080',
-                                            text: { body: 'Hey Meta, message to Test OpenAI connection' }
-                                        }]
-                                    }
-                                }]
-                            }]
-                        })
-                    }),
-                    // Nachrichten Status
-                    fetch('/api/webhook/logs')
-                ]);
-                
+                // System Info
+                await updateSystemInfo();
+
                 // Webhook Status
                 const webhookResponse = await fetch('/api/webhook?hub.mode=subscribe&hub.verify_token=meta_glasses_bridge_verify_2024');
                 const webhookStatus = document.getElementById('webhook-status');
@@ -440,62 +391,6 @@
                 } else {
                     whatsappStatus.className = 'status-indicator status-error';
                     whatsappDetails.textContent = 'WhatsApp API ist nicht erreichbar';
-                }
-
-                // OpenAI Status
-                const openaiResponse = await fetch('/api/webhook', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        object: 'whatsapp_business_account',
-                        entry: [{
-                            id: '1233067364910106',
-                            changes: [{
-                                value: {
-                                    messaging_product: 'whatsapp',
-                                    messages: [{
-                                        from: '41765669080',
-                                        text: { body: 'Hey Meta, message to Test OpenAI connection' }
-                                    }]
-                                }
-                            }]
-                        }]
-                    })
-                });
-
-                const openaiStatus = document.getElementById('openai-status');
-                const openaiDetails = document.getElementById('openai-details');
-                
-                if (openaiResponse.ok) {
-                    openaiStatus.className = 'status-indicator status-ok';
-                    openaiDetails.textContent = 'OpenAI API ist erreichbar';
-                } else {
-                    openaiStatus.className = 'status-indicator status-error';
-                    openaiDetails.textContent = 'OpenAI API ist nicht erreichbar';
-                }
-
-                // Nachrichten Status
-                const messageStatus = document.getElementById('message-status');
-                const messageDetails = document.getElementById('message-details');
-                const messageTime = document.getElementById('message-time');
-                const messageContent = document.getElementById('message-content');
-                const messageError = document.getElementById('message-error');
-
-                if (lastMessageTime) {
-                    messageStatus.className = 'status-indicator status-ok';
-                    messageTime.textContent = `Zeit: ${new Date(lastMessageTime).toLocaleString('de-DE')}`;
-                    messageContent.textContent = `Inhalt: ${lastMessageContent}`;
-                    if (lastMessageError) {
-                        messageError.textContent = `Fehler: ${lastMessageError}`;
-                        messageError.style.color = '#f44336';
-                    } else {
-                        messageError.textContent = '';
-                    }
-                } else {
-                    messageStatus.className = 'status-indicator status-warning';
-                    messageDetails.textContent = 'Warte auf Nachricht...';
                 }
 
                 // System Logs
