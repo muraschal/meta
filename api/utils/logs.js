@@ -16,10 +16,14 @@ const MAX_LOGS = 1000;
  * @param {string} type - Der Log-Typ (info, error, success, warning)
  */
 export function addLog(message, type = LogType.INFO) {
+    // Validiere den Log-Typ
+    const validTypes = Object.values(LogType);
+    const logType = validTypes.includes(type) ? type : LogType.INFO;
+
     const logEntry = {
         timestamp: new Date().toISOString(),
         message,
-        type
+        type: logType
     };
 
     // Füge den Log zum Cache hinzu
@@ -31,7 +35,7 @@ export function addLog(message, type = LogType.INFO) {
     }
 
     // Gib den Log auch in der Konsole aus
-    console.log(`[${type.toUpperCase()}] ${message}`);
+    console.log(`[${logType.toUpperCase()}] ${message}`);
 }
 
 /**

@@ -74,7 +74,7 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
       addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
       addLog(`Phone ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID}`, LogType.INFO);
 
-      const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+      const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
       addLog(`URL: ${url}`, LogType.INFO);
       
       const requestBody = {
@@ -85,16 +85,15 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
       };
       addLog(`Request Body: ${JSON.stringify(requestBody, null, 2)}`, LogType.INFO);
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify(requestBody),
-        agent: httpsAgent
-      });
+        body: JSON.stringify(requestBody)
+      }, 30000); // 30 Sekunden Timeout
 
       addLog(`Response Status: ${response.status}`, LogType.INFO);
       addLog(`Response Headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`, LogType.INFO);
@@ -108,10 +107,20 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
         
         // Spezifische Fehlerbehandlung
         if (errorData.error?.code === 190) {
+          addLog('Access Token ist ungültig oder abgelaufen', LogType.ERROR);
           throw new Error('Access Token ungültig oder abgelaufen');
         }
         if (errorData.error?.code === 100) {
+          addLog('Ungültige Parameter in der Anfrage', LogType.ERROR);
           throw new Error('Ungültige Parameter in der Anfrage');
+        }
+        if (errorData.error?.code === 131047) {
+          addLog('Message template not found', LogType.ERROR);
+          throw new Error('Nachrichtenvorlage nicht gefunden');
+        }
+        if (errorData.error?.code === 131051) {
+          addLog('Message type is currently not supported', LogType.ERROR);
+          throw new Error('Nachrichtentyp wird derzeit nicht unterstützt');
         }
         
         throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
@@ -186,99 +195,124 @@ export default async function handler(req, res) {
 
             addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
 
+            if (!mode || !token) {
+                addLog('Fehlende Parameter für Webhook-Verifizierung', LogType.ERROR);
+                return res.status(400).json({ error: 'Fehlende Parameter' });
+            }
+
             if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
                 addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
                 return res.status(200).send(challenge);
             }
 
-            addLog('Webhook-Verifizierung fehlgeschlagen', LogType.ERROR);
+            addLog('Webhook-Verifizierung fehlgeschlagen - Ungültiger Token', LogType.ERROR);
             return res.status(403).json({ error: 'Ungültiger Token' });
         }
 
         // Webhook Handler für POST-Requests
         if (req.method === 'POST') {
+            // Bestätige Empfang sofort
+            res.status(200).json({ status: 'ok' });
+
             addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
             addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
 
             const { body } = req;
             
-            if (body?.object === 'whatsapp_business_account') {
-                const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-                
-                if (message?.type === 'text') {
-                    const text = message.text.body.toLowerCase();
-                    const from = message.from;
-                    
-                    addLog(`Empfangene Nachricht von ${from}: ${text}`, LogType.INFO);
-                    
-                    if (text.startsWith('hey meta') && text.includes('message to')) {
-                        addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
-                        addLog(`Text: ${text}`, LogType.INFO);
-                        addLog(`Von: ${from}`, LogType.INFO);
-                        
-                        const content = text.split('message to')[1].trim();
-                        addLog(`Verarbeiteter Inhalt: ${content}`, LogType.INFO);
-                        
-                        try {
-                            // Sende Bestätigung
-                            addLog('Sende Bestätigung...', LogType.INFO);
-                            const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
-                            addLog('Bestätigung gesendet:', confirmSent, LogType.SUCCESS);
-                            
-                            if (!confirmSent) {
-                                throw new Error('Konnte Bestätigung nicht senden');
-                            }
-                            
-                            // Hole OpenAI Antwort
-                            addLog('Hole OpenAI Antwort...', LogType.INFO);
-                            const response = await getOpenAIResponse(content);
-                            addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
-                            
-                            // Sende Antwort
-                            addLog('Sende finale Antwort...', LogType.INFO);
-                            const finalSent = await sendWhatsAppMessageWithRetry(from, response);
-                            addLog('Finale Antwort gesendet:', finalSent, LogType.SUCCESS);
-                            
-                            if (!finalSent) {
-                                throw new Error('Konnte finale Antwort nicht senden');
-                            }
-                            
-                            addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
-                        } catch (error) {
-                            addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
-                            addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-                            addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-                            addLog(`Stack: ${error.stack}`, LogType.ERROR);
-                            
-                            await sendWhatsAppMessageWithRetry(from, 
-                                'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
-                                'Bitte versuchen Sie es später erneut.'
-                            ).catch(err => {
-                                addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
-                            });
-                        }
-                    } else {
-                        addLog('Kein gültiger Meta-Befehl erkannt', LogType.INFO);
-                    }
-                }
+            if (!body?.object || body.object !== 'whatsapp_business_account') {
+                addLog('Ungültiges Webhook-Objekt', LogType.ERROR);
+                return;
             }
 
-            // Bestätige Empfang sofort
-            return res.status(200).json({ status: 'ok' });
+            const entry = body.entry?.[0];
+            if (!entry?.changes?.[0]?.value) {
+                addLog('Ungültiges Webhook-Format', LogType.ERROR);
+                return;
+            }
+
+            const value = entry.changes[0].value;
+            const message = value.messages?.[0];
+
+            if (!message) {
+                addLog('Keine Nachricht im Webhook gefunden', LogType.INFO);
+                return;
+            }
+
+            const from = message.from;
+            const type = message.type;
+            
+            addLog(`Empfangene Nachricht - Typ: ${type}, Von: ${from}`, LogType.INFO);
+
+            if (type === 'text') {
+                const text = message.text.body.toLowerCase();
+                
+                if (text.startsWith('hey meta') && text.includes('message to')) {
+                    addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
+                    addLog(`Text: ${text}`, LogType.INFO);
+                    addLog(`Von: ${from}`, LogType.INFO);
+                    
+                    const content = text.split('message to')[1].trim();
+                    addLog(`Verarbeiteter Inhalt: ${content}`, LogType.INFO);
+                    
+                    try {
+                        // Sende Bestätigung
+                        addLog('Sende Bestätigung...', LogType.INFO);
+                        const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
+                        
+                        if (!confirmSent) {
+                            throw new Error('Konnte Bestätigung nicht senden');
+                        }
+                        
+                        // Hole OpenAI Antwort
+                        addLog('Hole OpenAI Antwort...', LogType.INFO);
+                        const response = await getOpenAIResponse(content);
+                        addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
+                        
+                        // Sende Antwort
+                        addLog('Sende finale Antwort...', LogType.INFO);
+                        const finalSent = await sendWhatsAppMessageWithRetry(from, response);
+                        
+                        if (!finalSent) {
+                            throw new Error('Konnte finale Antwort nicht senden');
+                        }
+                        
+                        addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
+                    } catch (error) {
+                        addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
+                        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+                        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                        addLog(`Stack: ${error.stack}`, LogType.ERROR);
+                        
+                        await sendWhatsAppMessageWithRetry(from, 
+                            'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
+                            'Bitte versuchen Sie es später erneut.'
+                        ).catch(err => {
+                            addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
+                        });
+                    }
+                } else {
+                    addLog('Kein gültiger Meta-Befehl erkannt', LogType.INFO);
+                }
+            }
+            return;
         }
 
         // Andere HTTP-Methoden
         return res.status(405).json({ error: 'Methode nicht erlaubt' });
 
     } catch (error) {
-        addLog(`Webhook-Fehler: ${error.message}`, LogType.ERROR);
+        addLog('=== WEBHOOK HANDLER FEHLER ===', LogType.ERROR);
+        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
         addLog(`Stack: ${error.stack}`, LogType.ERROR);
-        console.error('Webhook-Fehler:', error);
         
-        return res.status(500).json({ 
-            error: 'Interner Serverfehler',
-            message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten',
-            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-        });
+        // Wenn die Antwort noch nicht gesendet wurde
+        if (!res.headersSent) {
+            return res.status(500).json({ 
+                error: 'Interner Serverfehler',
+                message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten',
+                ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+            });
+        }
     }
 } 
