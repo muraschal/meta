@@ -71,8 +71,11 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
       addLog(`=== SENDE WHATSAPP NACHRICHT (Versuch ${attempt}/${maxRetries}) ===`, LogType.INFO);
       addLog(`An: ${to}`, LogType.INFO);
       addLog(`Nachricht: ${message}`, LogType.INFO);
+      addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
+      addLog(`Phone ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID}`, LogType.INFO);
 
       const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+      addLog(`URL: ${url}`, LogType.INFO);
       
       const requestBody = {
         messaging_product: 'whatsapp',
@@ -80,6 +83,7 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
         type: 'text',
         text: { body: message }
       };
+      addLog(`Request Body: ${JSON.stringify(requestBody, null, 2)}`, LogType.INFO);
 
       const response = await fetch(url, {
         method: 'POST',
@@ -92,12 +96,24 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
         agent: httpsAgent
       });
 
-      const responseData = await response.text();
       addLog(`Response Status: ${response.status}`, LogType.INFO);
+      addLog(`Response Headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`, LogType.INFO);
+
+      const responseData = await response.text();
       addLog(`Response Body: ${responseData}`, LogType.INFO);
 
       if (!response.ok) {
         const errorData = JSON.parse(responseData);
+        addLog(`WhatsApp API Fehler Details: ${JSON.stringify(errorData, null, 2)}`, LogType.ERROR);
+        
+        // Spezifische Fehlerbehandlung
+        if (errorData.error?.code === 190) {
+          throw new Error('Access Token ungültig oder abgelaufen');
+        }
+        if (errorData.error?.code === 100) {
+          throw new Error('Ungültige Parameter in der Anfrage');
+        }
+        
         throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
       }
 
@@ -108,6 +124,7 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
       addLog(`=== WHATSAPP FEHLER (Versuch ${attempt}/${maxRetries}) ===`, LogType.ERROR);
       addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
       addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+      addLog(`Stack: ${error.stack}`, LogType.ERROR);
       
       if (attempt < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
