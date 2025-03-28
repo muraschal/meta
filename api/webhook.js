@@ -52,7 +52,7 @@ async function sendWhatsAppMessage(to, message) {
     console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
     console.log('Business Account ID:', process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
 
-    const url = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
     console.log('URL:', url);
 
     const requestBody = {
@@ -68,6 +68,8 @@ async function sendWhatsAppMessage(to, message) {
       headers: {
         'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'WhatsApp/2.24.1.84'
       },
       body: JSON.stringify(requestBody)
     });
@@ -87,6 +89,17 @@ async function sendWhatsAppMessage(to, message) {
         type: errorData.error?.type,
         fbtrace_id: errorData.error?.fbtrace_id
       });
+      
+      // Spezifische Fehlerbehandlung
+      if (errorData.error?.code === 190) {
+        console.error('Access Token ungültig oder abgelaufen');
+        throw new Error('Access Token ungültig oder abgelaufen');
+      }
+      if (errorData.error?.code === 100) {
+        console.error('Ungültige Parameter');
+        throw new Error('Ungültige Parameter in der Anfrage');
+      }
+      
       throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
     }
 
@@ -101,6 +114,27 @@ async function sendWhatsAppMessage(to, message) {
     }
     if (error.name === 'AbortError') {
       console.error('Timeout beim Senden der WhatsApp Nachricht');
+      // Versuche es noch einmal ohne Timeout
+      try {
+        console.log('Versuche erneut ohne Timeout...');
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'WhatsApp/2.24.1.84'
+          },
+          body: JSON.stringify(requestBody)
+        });
+        
+        if (response.ok) {
+          console.log('Zweiter Versuch erfolgreich!');
+          return true;
+        }
+      } catch (retryError) {
+        console.error('Zweiter Versuch fehlgeschlagen:', retryError);
+      }
     }
     return false;
   }
