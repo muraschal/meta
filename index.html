@@ -114,6 +114,50 @@
             padding-left: 10px;
             margin: 5px 0;
         }
+        .system-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .system-info-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .system-info-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .system-info-value {
+            margin-top: 5px;
+            font-family: monospace;
+        }
+        .memory-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            margin-top: 5px;
+        }
+        .memory-used {
+            height: 100%;
+            background: #1a73e8;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        .log-filter {
+            margin-bottom: 10px;
+        }
+        .log-filter label {
+            margin-right: 10px;
+        }
+        .log-timestamp {
+            color: #666;
+            font-size: 0.9em;
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
@@ -161,10 +205,54 @@
 
         <div class="status-card">
             <div class="status-header">
+                <div class="status-title">System Status</div>
+                <div class="status-indicator" id="system-status"></div>
+            </div>
+            <div class="status-details">
+                <div class="system-info" id="system-info">
+                    <div class="system-info-item">
+                        <div class="system-info-label">Speicherauslastung</div>
+                        <div class="system-info-value" id="memory-usage">Lädt...</div>
+                        <div class="memory-bar">
+                            <div class="memory-used" id="memory-bar"></div>
+                        </div>
+                    </div>
+                    <div class="system-info-item">
+                        <div class="system-info-label">Uptime</div>
+                        <div class="system-info-value" id="system-uptime">Lädt...</div>
+                    </div>
+                    <div class="system-info-item">
+                        <div class="system-info-label">Umgebung</div>
+                        <div class="system-info-value" id="system-env">Lädt...</div>
+                    </div>
+                    <div class="system-info-item">
+                        <div class="system-info-label">Region</div>
+                        <div class="system-info-value" id="system-region">Lädt...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-header">
                 <div class="status-title">System Logs</div>
                 <div class="status-indicator" id="logs-status"></div>
             </div>
             <div class="status-details">
+                <div class="log-filter">
+                    <label>
+                        <input type="checkbox" id="filter-error" checked> Fehler
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-warning" checked> Warnungen
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-info" checked> Info
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filter-success" checked> Erfolg
+                    </label>
+                </div>
                 <pre id="logs-text"></pre>
             </div>
         </div>
@@ -178,8 +266,135 @@
         let lastMessageContent = null;
         let lastMessageError = null;
 
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / (24 * 60 * 60));
+            const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+            const minutes = Math.floor((seconds % (60 * 60)) / 60);
+            return `${days}d ${hours}h ${minutes}m`;
+        }
+
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return `${size.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        async function updateSystemInfo() {
+            try {
+                const response = await fetch('/api/system-info');
+                if (response.ok) {
+                    const info = await response.json();
+                    
+                    // Update memory usage
+                    const memoryUsage = document.getElementById('memory-usage');
+                    const memoryBar = document.getElementById('memory-bar');
+                    memoryUsage.textContent = `${info.memory.usage}% (${formatBytes(info.memory.used)} / ${formatBytes(info.memory.total)})`;
+                    memoryBar.style.width = `${info.memory.usage}%`;
+                    
+                    // Update uptime
+                    document.getElementById('system-uptime').textContent = formatUptime(info.uptime);
+                    
+                    // Update environment info
+                    document.getElementById('system-env').textContent = info.env.NODE_ENV || 'production';
+                    document.getElementById('system-region').textContent = info.env.VERCEL_REGION || 'unknown';
+                    
+                    // Update status indicator
+                    const systemStatus = document.getElementById('system-status');
+                    systemStatus.className = 'status-indicator status-ok';
+                } else {
+                    throw new Error('Fehler beim Abrufen der Systeminfos');
+                }
+            } catch (error) {
+                console.error('Systeminfo-Fehler:', error);
+                document.getElementById('system-status').className = 'status-indicator status-error';
+            }
+        }
+
+        function updateLogFilters() {
+            const showError = document.getElementById('filter-error').checked;
+            const showWarning = document.getElementById('filter-warning').checked;
+            const showInfo = document.getElementById('filter-info').checked;
+            const showSuccess = document.getElementById('filter-success').checked;
+
+            const logEntries = document.querySelectorAll('#logs-text > *');
+            logEntries.forEach(entry => {
+                if (entry.classList.contains('log-error')) {
+                    entry.style.display = showError ? '' : 'none';
+                } else if (entry.classList.contains('log-warning')) {
+                    entry.style.display = showWarning ? '' : 'none';
+                } else if (entry.classList.contains('log-info')) {
+                    entry.style.display = showInfo ? '' : 'none';
+                } else if (entry.classList.contains('log-success')) {
+                    entry.style.display = showSuccess ? '' : 'none';
+                }
+            });
+        }
+
+        // Add event listeners for log filters
+        document.getElementById('filter-error').addEventListener('change', updateLogFilters);
+        document.getElementById('filter-warning').addEventListener('change', updateLogFilters);
+        document.getElementById('filter-info').addEventListener('change', updateLogFilters);
+        document.getElementById('filter-success').addEventListener('change', updateLogFilters);
+
         async function checkStatus() {
             try {
+                await Promise.all([
+                    updateSystemInfo(),
+                    // Webhook Status
+                    fetch('/api/webhook?hub.mode=subscribe&hub.verify_token=meta_glasses_bridge_verify_2024'),
+                    // WhatsApp API Status
+                    fetch('/api/webhook', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            object: 'whatsapp_business_account',
+                            entry: [{
+                                id: '1233067364910106',
+                                changes: [{
+                                    value: {
+                                        messaging_product: 'whatsapp',
+                                        metadata: {
+                                            display_phone_number: '15556454549',
+                                            phone_number_id: '637450429443686'
+                                        }
+                                    }
+                                }]
+                            }]
+                        })
+                    }),
+                    // OpenAI Status
+                    fetch('/api/webhook', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            object: 'whatsapp_business_account',
+                            entry: [{
+                                id: '1233067364910106',
+                                changes: [{
+                                    value: {
+                                        messaging_product: 'whatsapp',
+                                        messages: [{
+                                            from: '41765669080',
+                                            text: { body: 'Hey Meta, message to Test OpenAI connection' }
+                                        }]
+                                    }
+                                }]
+                            }]
+                        })
+                    }),
+                    // Nachrichten Status
+                    fetch('/api/webhook/logs')
+                ]);
+                
                 // Webhook Status
                 const webhookResponse = await fetch('/api/webhook?hub.mode=subscribe&hub.verify_token=meta_glasses_bridge_verify_2024');
                 const webhookStatus = document.getElementById('webhook-status');
