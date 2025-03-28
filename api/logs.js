@@ -15,6 +15,7 @@ export default async function handler(req, res) {
         // Nur GET-Anfragen erlauben
         if (req.method !== 'GET') {
             return res.status(405).json({ 
+                status: 'error',
                 error: 'Methode nicht erlaubt',
                 message: 'Nur GET-Anfragen sind erlaubt'
             });
@@ -29,7 +30,10 @@ export default async function handler(req, res) {
         }
 
         // Sende die Logs zurück
-        return res.status(200).json(logs);
+        return res.status(200).json({
+            status: 'success',
+            data: logs
+        });
     } catch (error) {
         console.error('Fehler beim Abrufen der Logs:', error);
         
@@ -37,9 +41,10 @@ export default async function handler(req, res) {
         addLog(`Fehler beim Abrufen der Logs: ${error.message}`, LogType.ERROR);
         
         return res.status(500).json({ 
+            status: 'error',
             error: 'Interner Serverfehler',
-            message: error.message,
-            timestamp: new Date().toISOString()
+            message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten',
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
         });
     }
 } 

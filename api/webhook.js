@@ -158,147 +158,78 @@ async function getOpenAIResponse(content) {
 }
 
 export default async function handler(req, res) {
-  try {
-    addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
-    addLog(`Methode: ${req.method}`, LogType.INFO);
-    addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
+    try {
+        addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
+        addLog(`Methode: ${req.method}`, LogType.INFO);
+        addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
 
-    // Prüfe Umgebungsvariablen
-    const requiredEnvVars = [
-      'WEBHOOK_VERIFY_TOKEN',
-      'META_ACCESS_TOKEN',
-      'WHATSAPP_PHONE_NUMBER_ID',
-      'WHATSAPP_BUSINESS_ACCOUNT_ID',
-      'OPENAI_API_KEY'
-    ];
+        // Prüfe Umgebungsvariablen nur wenn sie benötigt werden
+        if (req.method === 'POST') {
+            const requiredEnvVars = [
+                'META_ACCESS_TOKEN',
+                'WHATSAPP_PHONE_NUMBER_ID',
+                'WHATSAPP_BUSINESS_ACCOUNT_ID',
+                'OPENAI_API_KEY'
+            ];
 
-    const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    if (missingEnvVars.length > 0) {
-      addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, LogType.ERROR);
-      throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
-    }
-
-    // Webhook Verification
-    if (req.method === 'GET') {
-      addLog('Webhook-Verifizierung gestartet', LogType.INFO);
-      const mode = req.query['hub.mode'];
-      const token = req.query['hub.verify_token'];
-      const challenge = req.query['hub.challenge'];
-
-      addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
-
-      if (!mode || !token) {
-        addLog('Fehlende Verifizierungsparameter', LogType.ERROR);
-        return res.status(400).json({ error: 'Fehlende Parameter' });
-      }
-
-      if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-        addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
-        return res.status(200).send(challenge);
-      }
-
-      addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', LogType.ERROR);
-      return res.status(403).json({ error: 'Ungültiger Token' });
-    }
-
-    // Webhook Handler
-    if (req.method === 'POST') {
-      addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
-      addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
-
-      // Bestätige Empfang sofort
-      res.status(200).send('OK');
-
-      try {
-        const { body } = req;
-        console.log('=== WEBHOOK PAYLOAD ===');
-        console.log(JSON.stringify(body, null, 2));
-        
-        if (body?.object === 'whatsapp_business_account') {
-          const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-          
-          if (message?.type === 'text') {
-            const text = message.text.body.toLowerCase();
-            const from = message.from;
-            
-            if (text.startsWith('hey meta') && text.includes('message to')) {
-              addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
-              addLog(`Text: ${text}`, LogType.INFO);
-              addLog(`Von: ${from}`, LogType.INFO);
-              
-              const content = text.split('message to')[1].trim();
-              
-              try {
-                // Sende Bestätigung
-                addLog('Sende Bestätigung...', LogType.INFO);
-                const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
-                addLog('Bestätigung gesendet:', confirmSent, LogType.SUCCESS);
-                
-                if (!confirmSent) {
-                  throw new Error('Konnte Bestätigung nicht senden');
-                }
-                
-                // Hole OpenAI Antwort
-                addLog('Hole OpenAI Antwort...', LogType.INFO);
-                const response = await getOpenAIResponse(content);
-                addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
-                
-                // Sende Antwort
-                addLog('Sende finale Antwort...', LogType.INFO);
-                const finalSent = await sendWhatsAppMessageWithRetry(from, response);
-                addLog('Finale Antwort gesendet:', finalSent, LogType.SUCCESS);
-                
-                if (!finalSent) {
-                  throw new Error('Konnte finale Antwort nicht senden');
-                }
-                
-                addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
-              } catch (error) {
-                addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
-                addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-                addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-                addLog(`Stack: ${error.stack}`, LogType.ERROR);
-                if (error.cause) {
-                  addLog('Ursache:', error.cause, LogType.INFO);
-                }
-                
-                await sendWhatsAppMessageWithRetry(from, 
-                  'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
-                  'Bitte versuchen Sie es später erneut.'
-                ).catch(err => {
-                  addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
-                });
-              }
+            const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+            if (missingEnvVars.length > 0) {
+                addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, LogType.ERROR);
+                throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
             }
-          }
         }
-      } catch (error) {
-        addLog('=== WEBHOOK FEHLER ===', LogType.ERROR);
-        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-        addLog(`Stack: ${error.stack}`, LogType.ERROR);
-        if (error.cause) {
-          addLog('Ursache:', error.cause, LogType.INFO);
-        }
-      }
-    }
 
-    return res.status(405).end();
-  } catch (error) {
-    addLog(`Webhook-Fehler: ${error.message}`, LogType.ERROR);
-    addLog(`Stack: ${error.stack}`, LogType.ERROR);
-    console.error('Webhook-Fehler:', error);
-    
-    // Sende detaillierte Fehlerinformationen nur in der Entwicklungsumgebung
-    const errorResponse = {
-      error: 'Interner Serverfehler',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten'
-    };
-    
-    if (process.env.NODE_ENV === 'development') {
-      errorResponse.stack = error.stack;
+        // Webhook Verification
+        if (req.method === 'GET') {
+            addLog('Webhook-Verifizierung gestartet', LogType.INFO);
+            const mode = req.query['hub.mode'];
+            const token = req.query['hub.verify_token'];
+            const challenge = req.query['hub.challenge'];
+
+            addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
+
+            // Prüfe nur den Token, wenn es ein Subscribe-Request ist
+            if (mode === 'subscribe') {
+                if (!token) {
+                    addLog('Fehlender Verifizierungs-Token', LogType.ERROR);
+                    return res.status(400).json({ error: 'Fehlender Token' });
+                }
+
+                // Prüfe den Token nur wenn er in der Umgebung definiert ist
+                if (process.env.WEBHOOK_VERIFY_TOKEN && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+                    addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
+                    return res.status(200).send(challenge);
+                }
+
+                addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', LogType.ERROR);
+                return res.status(403).json({ error: 'Ungültiger Token' });
+            }
+
+            // Wenn es kein Subscribe-Request ist, sende 400
+            return res.status(400).json({ error: 'Ungültiger Mode' });
+        }
+
+        // Webhook Handler für POST-Requests
+        if (req.method === 'POST') {
+            addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
+            addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
+
+            // Bestätige Empfang sofort
+            return res.status(200).json({ status: 'ok' });
+        }
+
+        // Andere HTTP-Methoden
+        return res.status(405).json({ error: 'Methode nicht erlaubt' });
+
+    } catch (error) {
+        addLog(`Webhook-Fehler: ${error.message}`, LogType.ERROR);
+        addLog(`Stack: ${error.stack}`, LogType.ERROR);
+        console.error('Webhook-Fehler:', error);
+        
+        return res.status(500).json({ 
+            error: 'Interner Serverfehler',
+            message: process.env.NODE_ENV === 'development' ? error.message : 'Ein unerwarteter Fehler ist aufgetreten',
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+        });
     }
-    
-    return res.status(500).json(errorResponse);
-  }
 } 
