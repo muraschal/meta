@@ -85,14 +85,34 @@
             border-radius: 4px;
             font-family: monospace;
             font-size: 12px;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
         .message-details {
             margin-top: 10px;
             padding: 10px;
             background: #f8f9fa;
             border-radius: 4px;
+        }
+        .log-error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .log-success {
+            color: #4caf50;
+        }
+        .log-info {
+            color: #1a73e8;
+        }
+        .log-warning {
+            color: #ff9800;
+        }
+        .log-section {
+            border-left: 3px solid #1a73e8;
+            padding-left: 10px;
+            margin: 5px 0;
         }
     </style>
 </head>
@@ -271,10 +291,26 @@
                 if (logsResponse.ok) {
                     const logs = await logsResponse.json();
                     logsStatus.className = 'status-indicator status-ok';
-                    logsText.textContent = logs.join('\n');
+                    
+                    // Format logs with colors
+                    const formattedLogs = logs.map(log => {
+                        if (log.includes('ERROR') || log.includes('FEHLER')) {
+                            return `<span class="log-error">${log}</span>`;
+                        } else if (log.includes('SUCCESS') || log.includes('ERFOLG')) {
+                            return `<span class="log-success">${log}</span>`;
+                        } else if (log.includes('===')) {
+                            return `<div class="log-section">${log}</div>`;
+                        } else if (log.includes('WARNING') || log.includes('WARNUNG')) {
+                            return `<span class="log-warning">${log}</span>`;
+                        } else {
+                            return log;
+                        }
+                    }).join('\n');
+                    
+                    logsText.innerHTML = formattedLogs;
                 } else {
                     logsStatus.className = 'status-indicator status-error';
-                    logsText.textContent = 'Keine Logs verfügbar';
+                    logsText.innerHTML = '<span class="log-error">Keine Logs verfügbar</span>';
                 }
 
                 // Update timestamp
