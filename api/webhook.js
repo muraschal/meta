@@ -19,6 +19,23 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+async function fetchWithTimeout(url, options, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 async function sendWhatsAppMessage(to, message) {
   try {
     console.log('=== SENDE WHATSAPP NACHRICHT ===');
@@ -38,25 +55,19 @@ async function sendWhatsAppMessage(to, message) {
     });
     console.log('Request Body:', body);
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body
-    }).catch(error => {
-      console.error('Fetch Fehler:', error);
-      throw error;
     });
 
     console.log('Response Status:', response.status);
     console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
     
-    const responseData = await response.text().catch(error => {
-      console.error('Response Text Fehler:', error);
-      return 'Konnte Response nicht lesen';
-    });
+    const responseData = await response.text();
     console.log('Response Body:', responseData);
 
     if (!response.ok) {
@@ -71,6 +82,9 @@ async function sendWhatsAppMessage(to, message) {
     console.error('Stack:', error.stack);
     if (error.cause) {
       console.error('Ursache:', error.cause);
+    }
+    if (error.name === 'AbortError') {
+      console.error('Timeout beim Senden der WhatsApp Nachricht');
     }
     return false;
   }
