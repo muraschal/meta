@@ -1,4 +1,4 @@
-import { getLogs, addLog, LogType } from './utils/logs';
+import { getLogs, addLog, LogType } from './utils/logs.js';
 
 export default async function handler(req, res) {
     try {

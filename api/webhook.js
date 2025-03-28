@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import https from 'https';
-import { addLog, LogType } from './utils/logs';
+import { addLog, LogType } from './utils/logs.js';
 import dotenv from 'dotenv';
 
 // Lade Umgebungsvariablen
