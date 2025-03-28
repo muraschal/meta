@@ -192,12 +192,15 @@ export default async function handler(req, res) {
                     const text = message.text.body.toLowerCase();
                     const from = message.from;
                     
+                    addLog(`Empfangene Nachricht von ${from}: ${text}`, LogType.INFO);
+                    
                     if (text.startsWith('hey meta') && text.includes('message to')) {
                         addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
                         addLog(`Text: ${text}`, LogType.INFO);
                         addLog(`Von: ${from}`, LogType.INFO);
                         
                         const content = text.split('message to')[1].trim();
+                        addLog(`Verarbeiteter Inhalt: ${content}`, LogType.INFO);
                         
                         try {
                             // Sende Bestätigung
@@ -228,6 +231,7 @@ export default async function handler(req, res) {
                             addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
                             addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
                             addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                            addLog(`Stack: ${error.stack}`, LogType.ERROR);
                             
                             await sendWhatsAppMessageWithRetry(from, 
                                 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
@@ -236,6 +240,8 @@ export default async function handler(req, res) {
                                 addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
                             });
                         }
+                    } else {
+                        addLog('Kein gültiger Meta-Befehl erkannt', LogType.INFO);
                     }
                 }
             }
