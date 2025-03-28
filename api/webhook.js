@@ -78,7 +78,8 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
           'Accept': 'application/json',
           'User-Agent': 'WhatsApp/2.24.1.84'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        agent: httpsAgent
       });
 
       console.log('Response Status:', response.status);
