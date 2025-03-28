@@ -153,9 +153,16 @@ async function getOpenAIResponse(content) {
     addLog(`Inhalt: ${content}`, LogType.INFO);
     
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content }],
-      max_tokens: 150,
+      model: "gpt-4",
+      messages: [{ 
+        role: "system", 
+        content: "Du bist ein hilfreicher Assistent, der präzise und informative Antworten gibt." 
+      },
+      { 
+        role: "user", 
+        content 
+      }],
+      max_tokens: 500,
       temperature: 0.7
     });
 
@@ -166,6 +173,7 @@ async function getOpenAIResponse(content) {
     addLog('=== OPENAI FEHLER ===', LogType.ERROR);
     addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
     addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+    addLog(`Stack: ${error.stack}`, LogType.ERROR);
     throw error;
   }
 }
