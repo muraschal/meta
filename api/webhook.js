@@ -43,101 +43,90 @@ async function fetchWithTimeout(url, options, timeout = 30000) { // Timeout auf 
   }
 }
 
-async function sendWhatsAppMessage(to, message) {
-  try {
-    console.log('=== SENDE WHATSAPP NACHRICHT ===');
-    console.log('An:', to);
-    console.log('Nachricht:', message);
-    console.log('Token (erste 10 Zeichen):', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
-    console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
-    console.log('Business Account ID:', process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-    console.log('URL:', url);
+async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`=== SENDE WHATSAPP NACHRICHT (Versuch ${attempt}/${maxRetries}) ===`);
+      console.log('An:', to);
+      console.log('Nachricht:', message);
+      console.log('Token (erste 10 Zeichen):', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
+      console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+      console.log('Business Account ID:', process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
 
-    const requestBody = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message }
-    };
-    console.log('Request Body:', JSON.stringify(requestBody, null, 2));
+      const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+      console.log('URL:', url);
 
-    const response = await fetchWithTimeout(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'WhatsApp/2.24.1.84'
-      },
-      body: JSON.stringify(requestBody)
-    });
+      const requestBody = {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: message }
+      };
+      console.log('Request Body:', JSON.stringify(requestBody, null, 2));
 
-    console.log('Response Status:', response.status);
-    console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
-    
-    const responseData = await response.text();
-    console.log('Response Body:', responseData);
-
-    if (!response.ok) {
-      const errorData = JSON.parse(responseData);
-      console.error('WhatsApp API Fehler Details:', {
-        code: errorData.error?.code,
-        subcode: errorData.error?.error_subcode,
-        message: errorData.error?.message,
-        type: errorData.error?.type,
-        fbtrace_id: errorData.error?.fbtrace_id
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'WhatsApp/2.24.1.84'
+        },
+        body: JSON.stringify(requestBody)
       });
-      
-      // Spezifische Fehlerbehandlung
-      if (errorData.error?.code === 190) {
-        console.error('Access Token ungültig oder abgelaufen');
-        throw new Error('Access Token ungültig oder abgelaufen');
-      }
-      if (errorData.error?.code === 100) {
-        console.error('Ungültige Parameter');
-        throw new Error('Ungültige Parameter in der Anfrage');
-      }
-      
-      throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
-    }
 
-    return true;
-  } catch (error) {
-    console.error('=== WHATSAPP FEHLER ===');
-    console.error('Fehlertyp:', error.name);
-    console.error('Fehlermeldung:', error.message);
-    console.error('Stack:', error.stack);
-    if (error.cause) {
-      console.error('Ursache:', error.cause);
-    }
-    if (error.name === 'AbortError') {
-      console.error('Timeout beim Senden der WhatsApp Nachricht');
-      // Versuche es noch einmal ohne Timeout
-      try {
-        console.log('Versuche erneut ohne Timeout...');
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'WhatsApp/2.24.1.84'
-          },
-          body: JSON.stringify(requestBody)
+      console.log('Response Status:', response.status);
+      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+      
+      const responseData = await response.text();
+      console.log('Response Body:', responseData);
+
+      if (!response.ok) {
+        const errorData = JSON.parse(responseData);
+        console.error('WhatsApp API Fehler Details:', {
+          code: errorData.error?.code,
+          subcode: errorData.error?.error_subcode,
+          message: errorData.error?.message,
+          type: errorData.error?.type,
+          fbtrace_id: errorData.error?.fbtrace_id
         });
         
-        if (response.ok) {
-          console.log('Zweiter Versuch erfolgreich!');
-          return true;
+        // Spezifische Fehlerbehandlung
+        if (errorData.error?.code === 190) {
+          throw new Error('Access Token ungültig oder abgelaufen');
         }
-      } catch (retryError) {
-        console.error('Zweiter Versuch fehlgeschlagen:', retryError);
+        if (errorData.error?.code === 100) {
+          throw new Error('Ungültige Parameter in der Anfrage');
+        }
+        
+        throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
+      }
+
+      console.log(`Versuch ${attempt} erfolgreich!`);
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.error(`=== WHATSAPP FEHLER (Versuch ${attempt}/${maxRetries}) ===`);
+      console.error('Fehlertyp:', error.name);
+      console.error('Fehlermeldung:', error.message);
+      console.error('Stack:', error.stack);
+      
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponentielles Backoff, max 10 Sekunden
+        console.log(`Warte ${delay}ms vor dem nächsten Versuch...`);
+        await sleep(delay);
       }
     }
-    return false;
   }
+  
+  console.error('Alle Versuche fehlgeschlagen. Letzter Fehler:', lastError);
+  return false;
 }
 
 async function getOpenAIResponse(content) {
@@ -214,7 +203,7 @@ export default async function handler(req, res) {
             try {
               // Sende Bestätigung
               console.log('Sende Bestätigung...');
-              const confirmSent = await sendWhatsAppMessage(from, 'Ich verarbeite Ihre Anfrage...');
+              const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
               console.log('Bestätigung gesendet:', confirmSent);
               
               if (!confirmSent) {
@@ -228,7 +217,7 @@ export default async function handler(req, res) {
               
               // Sende Antwort
               console.log('Sende finale Antwort...');
-              const finalSent = await sendWhatsAppMessage(from, response);
+              const finalSent = await sendWhatsAppMessageWithRetry(from, response);
               console.log('Finale Antwort gesendet:', finalSent);
               
               if (!finalSent) {
@@ -245,7 +234,7 @@ export default async function handler(req, res) {
                 console.error('Ursache:', error.cause);
               }
               
-              await sendWhatsAppMessage(from, 
+              await sendWhatsAppMessageWithRetry(from, 
                 'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
                 'Bitte versuchen Sie es später erneut.'
               ).catch(err => {
