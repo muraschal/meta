@@ -2,46 +2,50 @@
 export const LogType = {
     INFO: 'info',
     ERROR: 'error',
-    WARNING: 'warning',
-    SUCCESS: 'success'
+    SUCCESS: 'success',
+    WARNING: 'warning'
 };
 
-// Globaler Cache für Logs
-let globalLogs = [];
-const MAX_LOGS = 100;
+// In-Memory Log Cache
+let logCache = [];
+const MAX_LOGS = 1000;
 
 /**
- * Fügt einen neuen Log-Eintrag hinzu
+ * Fügt einen neuen Log hinzu
  * @param {string} message - Die Log-Nachricht
- * @param {string} type - Der Log-Typ (info, error, warning, success)
+ * @param {string} type - Der Log-Typ (info, error, success, warning)
  */
 export function addLog(message, type = LogType.INFO) {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
-    
-    // Füge den Log am Anfang der Liste hinzu
-    globalLogs.unshift(logEntry);
-    
-    // Begrenze die Anzahl der Logs
-    if (globalLogs.length > MAX_LOGS) {
-        globalLogs = globalLogs.slice(0, MAX_LOGS);
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        message,
+        type
+    };
+
+    // Füge den Log zum Cache hinzu
+    logCache.unshift(logEntry);
+
+    // Begrenze die Cache-Größe
+    if (logCache.length > MAX_LOGS) {
+        logCache = logCache.slice(0, MAX_LOGS);
     }
 
-    // Log auch in der Konsole ausgeben
-    console.log(logEntry);
+    // Gib den Log auch in der Konsole aus
+    console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
 /**
- * Gibt alle gespeicherten Logs zurück
+ * Gibt alle Logs zurück
+ * @returns {Array} Array von Log-Einträgen
  */
 export function getLogs() {
-    return globalLogs;
+    return logCache;
 }
 
 /**
  * Löscht alle Logs
  */
 export function clearLogs() {
-    globalLogs = [];
-    addLog('Log-System zurückgesetzt', LogType.INFO);
+    logCache = [];
+    addLog('Logs gelöscht', LogType.INFO);
 } 
