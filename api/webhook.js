@@ -76,7 +76,9 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
           'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'User-Agent': 'WhatsApp/2.24.1.84'
+          'User-Agent': 'WhatsApp/2.24.1.84',
+          'X-WhatsApp-Client': '2.24.1.84',
+          'X-WhatsApp-Platform': 'iOS'
         },
         body: JSON.stringify(requestBody),
         agent: httpsAgent
