@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import https from 'https';
+import { addLog } from './webhook/logs';
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
@@ -161,102 +162,116 @@ async function getOpenAIResponse(content) {
 }
 
 export default async function handler(req, res) {
-  console.log('=== WEBHOOK HANDLER START ===');
-  console.log('Methode:', req.method);
-  console.log('Headers:', req.headers);
-  
-  // Webhook Verification
-  if (req.method === 'GET') {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+  try {
+    addLog('=== WEBHOOK HANDLER START ===', 'info');
+    addLog(`Methode: ${req.method}`, 'info');
+    addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, 'info');
 
-    console.log('Webhook Verifizierung:', { mode, token: token?.substring(0, 5) + '...', challenge });
+    // Webhook Verification
+    if (req.method === 'GET') {
+      addLog('Webhook-Verifizierung gestartet', 'info');
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-      return res.status(200).send(challenge);
+      console.log('Webhook Verifizierung:', { mode, token: token?.substring(0, 5) + '...', challenge });
+
+      if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+        addLog('Webhook erfolgreich verifiziert', 'success');
+        return res.status(200).send(challenge);
+      }
+      return res.status(403).end();
     }
-    return res.status(403).end();
-  }
 
-  // Webhook Handler
-  if (req.method === 'POST') {
-    // Bestätige Empfang sofort
-    res.status(200).send('OK');
+    // Webhook Handler
+    if (req.method === 'POST') {
+      addLog('=== WEBHOOK PAYLOAD ===', 'info');
+      addLog(JSON.stringify(req.body, null, 2), 'info');
 
-    try {
-      const { body } = req;
-      console.log('=== WEBHOOK PAYLOAD ===');
-      console.log(JSON.stringify(body, null, 2));
-      
-      if (body?.object === 'whatsapp_business_account') {
-        const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+      // Bestätige Empfang sofort
+      res.status(200).send('OK');
+
+      try {
+        const { body } = req;
+        console.log('=== WEBHOOK PAYLOAD ===');
+        console.log(JSON.stringify(body, null, 2));
         
-        if (message?.type === 'text') {
-          const text = message.text.body.toLowerCase();
-          const from = message.from;
+        if (body?.object === 'whatsapp_business_account') {
+          const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
           
-          if (text.startsWith('hey meta') && text.includes('message to')) {
-            console.log('=== META BEFEHL EMPFANGEN ===');
-            console.log('Text:', text);
-            console.log('Von:', from);
+          if (message?.type === 'text') {
+            const text = message.text.body.toLowerCase();
+            const from = message.from;
             
-            const content = text.split('message to')[1].trim();
-            
-            try {
-              // Sende Bestätigung
-              console.log('Sende Bestätigung...');
-              const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
-              console.log('Bestätigung gesendet:', confirmSent);
+            if (text.startsWith('hey meta') && text.includes('message to')) {
+              addLog('=== META BEFEHL EMPFANGEN ===', 'info');
+              addLog(`Text: ${text}`, 'info');
+              addLog(`Von: ${from}`, 'info');
               
-              if (!confirmSent) {
-                throw new Error('Konnte Bestätigung nicht senden');
+              const content = text.split('message to')[1].trim();
+              
+              try {
+                // Sende Bestätigung
+                addLog('Sende Bestätigung...', 'info');
+                const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
+                addLog('Bestätigung gesendet:', confirmSent, 'success');
+                
+                if (!confirmSent) {
+                  throw new Error('Konnte Bestätigung nicht senden');
+                }
+                
+                // Hole OpenAI Antwort
+                addLog('Hole OpenAI Antwort...', 'info');
+                const response = await getOpenAIResponse(content);
+                addLog('OpenAI Antwort erhalten:', response, 'success');
+                
+                // Sende Antwort
+                addLog('Sende finale Antwort...', 'info');
+                const finalSent = await sendWhatsAppMessageWithRetry(from, response);
+                addLog('Finale Antwort gesendet:', finalSent, 'success');
+                
+                if (!finalSent) {
+                  throw new Error('Konnte finale Antwort nicht senden');
+                }
+                
+                addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', 'success');
+              } catch (error) {
+                addLog('=== VERARBEITUNGSFEHLER ===', 'error');
+                addLog(`Fehlertyp: ${error.name}`, 'error');
+                addLog(`Fehlermeldung: ${error.message}`, 'error');
+                addLog(`Stack: ${error.stack}`, 'error');
+                if (error.cause) {
+                  addLog('Ursache:', error.cause, 'info');
+                }
+                
+                await sendWhatsAppMessageWithRetry(from, 
+                  'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
+                  'Bitte versuchen Sie es später erneut.'
+                ).catch(err => {
+                  addLog('Fehler beim Senden der Fehlermeldung:', err, 'error');
+                });
               }
-              
-              // Hole OpenAI Antwort
-              console.log('Hole OpenAI Antwort...');
-              const response = await getOpenAIResponse(content);
-              console.log('OpenAI Antwort erhalten:', response);
-              
-              // Sende Antwort
-              console.log('Sende finale Antwort...');
-              const finalSent = await sendWhatsAppMessageWithRetry(from, response);
-              console.log('Finale Antwort gesendet:', finalSent);
-              
-              if (!finalSent) {
-                throw new Error('Konnte finale Antwort nicht senden');
-              }
-              
-              console.log('=== VERARBEITUNG ABGESCHLOSSEN ===');
-            } catch (error) {
-              console.error('=== VERARBEITUNGSFEHLER ===');
-              console.error('Fehlertyp:', error.name);
-              console.error('Fehlermeldung:', error.message);
-              console.error('Stack:', error.stack);
-              if (error.cause) {
-                console.error('Ursache:', error.cause);
-              }
-              
-              await sendWhatsAppMessageWithRetry(from, 
-                'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
-                'Bitte versuchen Sie es später erneut.'
-              ).catch(err => {
-                console.error('Fehler beim Senden der Fehlermeldung:', err);
-              });
             }
           }
         }
-      }
-    } catch (error) {
-      console.error('=== WEBHOOK FEHLER ===');
-      console.error('Fehlertyp:', error.name);
-      console.error('Fehlermeldung:', error.message);
-      console.error('Stack:', error.stack);
-      if (error.cause) {
-        console.error('Ursache:', error.cause);
+      } catch (error) {
+        addLog('=== WEBHOOK FEHLER ===', 'error');
+        addLog(`Fehlertyp: ${error.name}`, 'error');
+        addLog(`Fehlermeldung: ${error.message}`, 'error');
+        addLog(`Stack: ${error.stack}`, 'error');
+        if (error.cause) {
+          addLog('Ursache:', error.cause, 'info');
+        }
       }
     }
-  }
 
-  return res.status(405).end();
+    return res.status(405).end();
+  } catch (error) {
+    addLog(`Webhook-Fehler: ${error.message}`, 'error');
+    console.error('Webhook-Fehler:', error);
+    return res.status(500).json({ 
+      error: 'Interner Serverfehler',
+      message: error.message 
+    });
+  }
 } 
