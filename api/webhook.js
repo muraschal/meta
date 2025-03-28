@@ -22,7 +22,7 @@ const httpsAgent = new https.Agent({
   rejectUnauthorized: false // Nur für Debugging, in Produktion auf true setzen
 });
 
-async function fetchWithTimeout(url, options, timeout = 30000) { // Timeout auf 30 Sekunden erhöht
+async function fetchWithTimeout(url, options, timeout = 30000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   
@@ -49,91 +49,63 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`=== SENDE WHATSAPP NACHRICHT (Versuch ${attempt}/${maxRetries}) ===`);
-      console.log('An:', to);
-      console.log('Nachricht:', message);
-      console.log('Token (erste 10 Zeichen):', process.env.META_ACCESS_TOKEN?.substring(0, 10) + '...');
-      console.log('Phone ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
-      console.log('Business Account ID:', process.env.WHATSAPP_BUSINESS_ACCOUNT_ID);
+      addLog(`=== SENDE WHATSAPP NACHRICHT (Versuch ${attempt}/${maxRetries}) ===`, LogType.INFO);
+      addLog(`An: ${to}`, LogType.INFO);
+      addLog(`Nachricht: ${message}`, LogType.INFO);
 
       const url = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-      console.log('URL:', url);
-
+      
       const requestBody = {
         messaging_product: 'whatsapp',
         to,
         type: 'text',
         text: { body: message }
       };
-      console.log('Request Body:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'WhatsApp/2.24.1.84',
-          'X-WhatsApp-Client': '2.24.1.84',
-          'X-WhatsApp-Platform': 'iOS'
+          'Accept': 'application/json'
         },
         body: JSON.stringify(requestBody),
         agent: httpsAgent
       });
 
-      console.log('Response Status:', response.status);
-      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
-      
       const responseData = await response.text();
-      console.log('Response Body:', responseData);
+      addLog(`Response Status: ${response.status}`, LogType.INFO);
+      addLog(`Response Body: ${responseData}`, LogType.INFO);
 
       if (!response.ok) {
         const errorData = JSON.parse(responseData);
-        console.error('WhatsApp API Fehler Details:', {
-          code: errorData.error?.code,
-          subcode: errorData.error?.error_subcode,
-          message: errorData.error?.message,
-          type: errorData.error?.type,
-          fbtrace_id: errorData.error?.fbtrace_id
-        });
-        
-        // Spezifische Fehlerbehandlung
-        if (errorData.error?.code === 190) {
-          throw new Error('Access Token ungültig oder abgelaufen');
-        }
-        if (errorData.error?.code === 100) {
-          throw new Error('Ungültige Parameter in der Anfrage');
-        }
-        
         throw new Error(`WhatsApp API Fehler: ${response.status} - ${responseData}`);
       }
 
-      console.log(`Versuch ${attempt} erfolgreich!`);
+      addLog(`Versuch ${attempt} erfolgreich!`, LogType.SUCCESS);
       return true;
     } catch (error) {
       lastError = error;
-      console.error(`=== WHATSAPP FEHLER (Versuch ${attempt}/${maxRetries}) ===`);
-      console.error('Fehlertyp:', error.name);
-      console.error('Fehlermeldung:', error.message);
-      console.error('Stack:', error.stack);
+      addLog(`=== WHATSAPP FEHLER (Versuch ${attempt}/${maxRetries}) ===`, LogType.ERROR);
+      addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+      addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
       
       if (attempt < maxRetries) {
-        const delay = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponentielles Backoff, max 10 Sekunden
-        console.log(`Warte ${delay}ms vor dem nächsten Versuch...`);
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        addLog(`Warte ${delay}ms vor dem nächsten Versuch...`, LogType.INFO);
         await sleep(delay);
       }
     }
   }
   
-  console.error('Alle Versuche fehlgeschlagen. Letzter Fehler:', lastError);
+  addLog('Alle Versuche fehlgeschlagen. Letzter Fehler: ' + lastError, LogType.ERROR);
   return false;
 }
 
 async function getOpenAIResponse(content) {
   try {
-    console.log('=== OPENAI ANFRAGE ===');
-    console.log('Inhalt:', content);
-    console.log('API Key vorhanden:', !!process.env.OPENAI_API_KEY);
+    addLog('=== OPENAI ANFRAGE ===', LogType.INFO);
+    addLog(`Inhalt: ${content}`, LogType.INFO);
     
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -143,41 +115,31 @@ async function getOpenAIResponse(content) {
     });
 
     const response = completion?.choices?.[0]?.message?.content;
-    console.log('OpenAI Antwort:', response);
+    addLog(`OpenAI Antwort: ${response}`, LogType.SUCCESS);
     return response || 'Keine Antwort von OpenAI erhalten';
   } catch (error) {
-    console.error('=== OPENAI FEHLER ===');
-    console.error('Fehlertyp:', error.name);
-    console.error('Fehlermeldung:', error.message);
-    console.error('Stack:', error.stack);
-    if (error.cause) {
-      console.error('Ursache:', error.cause);
-    }
+    addLog('=== OPENAI FEHLER ===', LogType.ERROR);
+    addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+    addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
     throw error;
   }
 }
 
 export default async function handler(req, res) {
     try {
+        // CORS-Header hinzufügen
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+        // OPTIONS-Anfragen direkt beantworten
+        if (req.method === 'OPTIONS') {
+            return res.status(200).end();
+        }
+
         addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
         addLog(`Methode: ${req.method}`, LogType.INFO);
         addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
-
-        // Prüfe Umgebungsvariablen nur wenn sie benötigt werden
-        if (req.method === 'POST') {
-            const requiredEnvVars = [
-                'META_ACCESS_TOKEN',
-                'WHATSAPP_PHONE_NUMBER_ID',
-                'WHATSAPP_BUSINESS_ACCOUNT_ID',
-                'OPENAI_API_KEY'
-            ];
-
-            const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-            if (missingEnvVars.length > 0) {
-                addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, LogType.ERROR);
-                throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
-            }
-        }
 
         // Webhook Verification
         if (req.method === 'GET') {
@@ -188,31 +150,76 @@ export default async function handler(req, res) {
 
             addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
 
-            // Prüfe nur den Token, wenn es ein Subscribe-Request ist
-            if (mode === 'subscribe') {
-                if (!token) {
-                    addLog('Fehlender Verifizierungs-Token', LogType.ERROR);
-                    return res.status(400).json({ error: 'Fehlender Token' });
-                }
-
-                // Prüfe den Token nur wenn er in der Umgebung definiert ist
-                if (process.env.WEBHOOK_VERIFY_TOKEN && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-                    addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
-                    return res.status(200).send(challenge);
-                }
-
-                addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', LogType.ERROR);
-                return res.status(403).json({ error: 'Ungültiger Token' });
+            if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+                addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
+                return res.status(200).send(challenge);
             }
 
-            // Wenn es kein Subscribe-Request ist, sende 400
-            return res.status(400).json({ error: 'Ungültiger Mode' });
+            addLog('Webhook-Verifizierung fehlgeschlagen', LogType.ERROR);
+            return res.status(403).json({ error: 'Ungültiger Token' });
         }
 
         // Webhook Handler für POST-Requests
         if (req.method === 'POST') {
             addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
             addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
+
+            const { body } = req;
+            
+            if (body?.object === 'whatsapp_business_account') {
+                const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+                
+                if (message?.type === 'text') {
+                    const text = message.text.body.toLowerCase();
+                    const from = message.from;
+                    
+                    if (text.startsWith('hey meta') && text.includes('message to')) {
+                        addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
+                        addLog(`Text: ${text}`, LogType.INFO);
+                        addLog(`Von: ${from}`, LogType.INFO);
+                        
+                        const content = text.split('message to')[1].trim();
+                        
+                        try {
+                            // Sende Bestätigung
+                            addLog('Sende Bestätigung...', LogType.INFO);
+                            const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
+                            addLog('Bestätigung gesendet:', confirmSent, LogType.SUCCESS);
+                            
+                            if (!confirmSent) {
+                                throw new Error('Konnte Bestätigung nicht senden');
+                            }
+                            
+                            // Hole OpenAI Antwort
+                            addLog('Hole OpenAI Antwort...', LogType.INFO);
+                            const response = await getOpenAIResponse(content);
+                            addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
+                            
+                            // Sende Antwort
+                            addLog('Sende finale Antwort...', LogType.INFO);
+                            const finalSent = await sendWhatsAppMessageWithRetry(from, response);
+                            addLog('Finale Antwort gesendet:', finalSent, LogType.SUCCESS);
+                            
+                            if (!finalSent) {
+                                throw new Error('Konnte finale Antwort nicht senden');
+                            }
+                            
+                            addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
+                        } catch (error) {
+                            addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
+                            addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+                            addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                            
+                            await sendWhatsAppMessageWithRetry(from, 
+                                'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
+                                'Bitte versuchen Sie es später erneut.'
+                            ).catch(err => {
+                                addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
+                            });
+                        }
+                    }
+                }
+            }
 
             // Bestätige Empfang sofort
             return res.status(200).json({ status: 'ok' });

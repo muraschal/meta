@@ -14,6 +14,7 @@ export default async function handler(req, res) {
 
         // Nur GET-Anfragen erlauben
         if (req.method !== 'GET') {
+            addLog(`Ungültige Methode: ${req.method}`, LogType.ERROR);
             return res.status(405).json({ 
                 status: 'error',
                 error: 'Methode nicht erlaubt',
@@ -29,16 +30,17 @@ export default async function handler(req, res) {
             addLog('Log-System initialisiert', LogType.INFO);
         }
 
+        addLog(`Sende ${logs.length} Logs zurück`, LogType.INFO);
+
         // Sende die Logs zurück
         return res.status(200).json({
             status: 'success',
             data: logs
         });
     } catch (error) {
-        console.error('Fehler beim Abrufen der Logs:', error);
-        
-        // Füge den Fehler zu den Logs hinzu
         addLog(`Fehler beim Abrufen der Logs: ${error.message}`, LogType.ERROR);
+        addLog(`Stack: ${error.stack}`, LogType.ERROR);
+        console.error('Fehler beim Abrufen der Logs:', error);
         
         return res.status(500).json({ 
             status: 'error',
