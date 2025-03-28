@@ -221,30 +221,38 @@ export default async function handler(req, res) {
             
             if (!body?.object || body.object !== 'whatsapp_business_account') {
                 addLog('Ungültiges Webhook-Objekt', LogType.ERROR);
+                addLog(`Erhaltenes Objekt: ${body?.object}`, LogType.ERROR);
                 return;
             }
 
             const entry = body.entry?.[0];
             if (!entry?.changes?.[0]?.value) {
                 addLog('Ungültiges Webhook-Format', LogType.ERROR);
+                addLog(`Entry: ${JSON.stringify(entry)}`, LogType.ERROR);
                 return;
             }
 
             const value = entry.changes[0].value;
-            const message = value.messages?.[0];
+            const messages = value.messages;
+            
+            addLog(`Empfangene Messages: ${JSON.stringify(messages)}`, LogType.INFO);
 
-            if (!message) {
+            if (!messages || !messages[0]) {
                 addLog('Keine Nachricht im Webhook gefunden', LogType.INFO);
+                addLog(`Value: ${JSON.stringify(value)}`, LogType.INFO);
                 return;
             }
 
+            const message = messages[0];
             const from = message.from;
             const type = message.type;
             
             addLog(`Empfangene Nachricht - Typ: ${type}, Von: ${from}`, LogType.INFO);
+            addLog(`Vollständige Nachricht: ${JSON.stringify(message)}`, LogType.INFO);
 
             if (type === 'text') {
                 const text = message.text.body.toLowerCase();
+                addLog(`Nachrichtentext: ${text}`, LogType.INFO);
                 
                 if (text.startsWith('hey meta') && text.includes('message to')) {
                     addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
