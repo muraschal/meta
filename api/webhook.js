@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import https from 'https';
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
@@ -19,14 +20,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-async function fetchWithTimeout(url, options, timeout = 10000) {
+// HTTPS Agent für besseres SSL-Handling
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false // Nur für Debugging, in Produktion auf true setzen
+});
+
+async function fetchWithTimeout(url, options, timeout = 30000) { // Timeout auf 30 Sekunden erhöht
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
+      agent: httpsAgent
     });
     clearTimeout(id);
     return response;
