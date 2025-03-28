@@ -79,6 +79,21 @@
         .refresh-button:hover {
             background: #1557b0;
         }
+        #logs-text {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .message-details {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -114,7 +129,24 @@
                 <div class="status-title">Letzte Nachricht</div>
                 <div class="status-indicator" id="message-status"></div>
             </div>
-            <div class="status-details" id="message-details">Keine Nachrichten empfangen</div>
+            <div class="status-details">
+                <div id="message-details">Warte auf Nachricht...</div>
+                <div class="message-details">
+                    <div id="message-time"></div>
+                    <div id="message-content"></div>
+                    <div id="message-error"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-header">
+                <div class="status-title">System Logs</div>
+                <div class="status-indicator" id="logs-status"></div>
+            </div>
+            <div class="status-details">
+                <pre id="logs-text"></pre>
+            </div>
         </div>
 
         <button class="refresh-button" onclick="checkStatus()">Status aktualisieren</button>
@@ -122,6 +154,10 @@
     </div>
 
     <script>
+        let lastMessageTime = null;
+        let lastMessageContent = null;
+        let lastMessageError = null;
+
         async function checkStatus() {
             try {
                 // Webhook Status
@@ -205,6 +241,42 @@
                     openaiDetails.textContent = 'OpenAI API ist nicht erreichbar';
                 }
 
+                // Nachrichten Status
+                const messageStatus = document.getElementById('message-status');
+                const messageDetails = document.getElementById('message-details');
+                const messageTime = document.getElementById('message-time');
+                const messageContent = document.getElementById('message-content');
+                const messageError = document.getElementById('message-error');
+
+                if (lastMessageTime) {
+                    messageStatus.className = 'status-indicator status-ok';
+                    messageTime.textContent = `Zeit: ${new Date(lastMessageTime).toLocaleString('de-DE')}`;
+                    messageContent.textContent = `Inhalt: ${lastMessageContent}`;
+                    if (lastMessageError) {
+                        messageError.textContent = `Fehler: ${lastMessageError}`;
+                        messageError.style.color = '#f44336';
+                    } else {
+                        messageError.textContent = '';
+                    }
+                } else {
+                    messageStatus.className = 'status-indicator status-warning';
+                    messageDetails.textContent = 'Warte auf Nachricht...';
+                }
+
+                // System Logs
+                const logsResponse = await fetch('/api/webhook/logs');
+                const logsStatus = document.getElementById('logs-status');
+                const logsText = document.getElementById('logs-text');
+                
+                if (logsResponse.ok) {
+                    const logs = await logsResponse.json();
+                    logsStatus.className = 'status-indicator status-ok';
+                    logsText.textContent = logs.join('\n');
+                } else {
+                    logsStatus.className = 'status-indicator status-error';
+                    logsText.textContent = 'Keine Logs verfügbar';
+                }
+
                 // Update timestamp
                 const now = new Date();
                 document.getElementById('last-check').textContent = 
@@ -220,8 +292,8 @@
         // Initial check
         checkStatus();
         
-        // Auto-refresh every 5 minutes
-        setInterval(checkStatus, 5 * 60 * 1000);
+        // Auto-refresh every 30 seconds
+        setInterval(checkStatus, 30 * 1000);
     </script>
 </body>
 </html> 
