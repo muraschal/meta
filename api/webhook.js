@@ -1,6 +1,25 @@
 import OpenAI from 'openai';
 import https from 'https';
 import { addLog, LogType } from './utils/logs';
+import dotenv from 'dotenv';
+
+// Lade Umgebungsvariablen
+dotenv.config();
+
+// Prüfe erforderliche Umgebungsvariablen
+const requiredEnvVars = [
+    'META_ACCESS_TOKEN',
+    'WHATSAPP_PHONE_NUMBER_ID',
+    'WHATSAPP_BUSINESS_ACCOUNT_ID',
+    'OPENAI_API_KEY',
+    'WEBHOOK_VERIFY_TOKEN'
+];
+
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingEnvVars.length > 0) {
+    console.error('Fehlende Umgebungsvariablen:', missingEnvVars);
+    throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
+}
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
