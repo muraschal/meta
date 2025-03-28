@@ -1,4 +1,4 @@
-import { logs, addLog, LogType } from './utils/logs';
+import { getLogs, addLog, LogType } from './utils/logs';
 
 export default async function handler(req, res) {
     try {
@@ -20,6 +20,9 @@ export default async function handler(req, res) {
             });
         }
 
+        // Hole die Logs
+        const logs = getLogs();
+        
         // Füge einen Test-Log hinzu, wenn keine Logs vorhanden sind
         if (logs.length === 0) {
             addLog('Log-System initialisiert', LogType.INFO);

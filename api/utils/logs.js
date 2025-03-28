@@ -1,7 +1,3 @@
-// In-Memory Log-Speicher
-export let logs = [];
-const MAX_LOGS = 100;
-
 // Log-Typen
 export const LogType = {
     INFO: 'info',
@@ -9,6 +5,10 @@ export const LogType = {
     WARNING: 'warning',
     SUCCESS: 'success'
 };
+
+// Globaler Cache für Logs
+let globalLogs = [];
+const MAX_LOGS = 100;
 
 /**
  * Fügt einen neuen Log-Eintrag hinzu
@@ -20,31 +20,28 @@ export function addLog(message, type = LogType.INFO) {
     const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
     
     // Füge den Log am Anfang der Liste hinzu
-    logs.unshift(logEntry);
+    globalLogs.unshift(logEntry);
     
     // Begrenze die Anzahl der Logs
-    if (logs.length > MAX_LOGS) {
-        logs = logs.slice(0, MAX_LOGS);
+    if (globalLogs.length > MAX_LOGS) {
+        globalLogs = globalLogs.slice(0, MAX_LOGS);
     }
 
     // Log auch in der Konsole ausgeben
     console.log(logEntry);
 }
 
-export default async function handler(req, res) {
-    try {
-        // Füge einen Test-Log hinzu, wenn keine Logs vorhanden sind
-        if (logs.length === 0) {
-            addLog('Log-System initialisiert', 'info');
-        }
+/**
+ * Gibt alle gespeicherten Logs zurück
+ */
+export function getLogs() {
+    return globalLogs;
+}
 
-        res.status(200).json(logs);
-    } catch (error) {
-        console.error('Fehler beim Abrufen der Logs:', error);
-        res.status(500).json({ 
-            error: 'Interner Serverfehler',
-            message: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
+/**
+ * Löscht alle Logs
+ */
+export function clearLogs() {
+    globalLogs = [];
+    addLog('Log-System zurückgesetzt', LogType.INFO);
 } 

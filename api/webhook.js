@@ -1,20 +1,16 @@
 import OpenAI from 'openai';
 import https from 'https';
-import { addLog } from './utils/logs';
+import { addLog, LogType } from './utils/logs';
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
-  console.error('=== UNHANDLED REJECTION ===');
-  console.error('Fehlertyp:', error.name);
-  console.error('Fehlermeldung:', error.message);
-  console.error('Stack:', error.stack);
+    addLog(`Unbehandelter Promise-Fehler: ${error.message}`, LogType.ERROR);
+    console.error('Unhandled Promise Rejection:', error);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Fehlertyp:', error.name);
-  console.error('Fehlermeldung:', error.message);
-  console.error('Stack:', error.stack);
+    addLog(`Unbehandelter Fehler: ${error.message}`, LogType.ERROR);
+    console.error('Uncaught Exception:', error);
 });
 
 const openai = new OpenAI({
@@ -163,9 +159,9 @@ async function getOpenAIResponse(content) {
 
 export default async function handler(req, res) {
   try {
-    addLog('=== WEBHOOK HANDLER START ===', 'info');
-    addLog(`Methode: ${req.method}`, 'info');
-    addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, 'info');
+    addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
+    addLog(`Methode: ${req.method}`, LogType.INFO);
+    addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
 
     // Prüfe Umgebungsvariablen
     const requiredEnvVars = [
@@ -178,37 +174,37 @@ export default async function handler(req, res) {
 
     const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
     if (missingEnvVars.length > 0) {
-      addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, 'error');
+      addLog(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`, LogType.ERROR);
       throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
     }
 
     // Webhook Verification
     if (req.method === 'GET') {
-      addLog('Webhook-Verifizierung gestartet', 'info');
+      addLog('Webhook-Verifizierung gestartet', LogType.INFO);
       const mode = req.query['hub.mode'];
       const token = req.query['hub.verify_token'];
       const challenge = req.query['hub.challenge'];
 
-      addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, 'info');
+      addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
 
       if (!mode || !token) {
-        addLog('Fehlende Verifizierungsparameter', 'error');
+        addLog('Fehlende Verifizierungsparameter', LogType.ERROR);
         return res.status(400).json({ error: 'Fehlende Parameter' });
       }
 
       if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-        addLog('Webhook erfolgreich verifiziert', 'success');
+        addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
         return res.status(200).send(challenge);
       }
 
-      addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', 'error');
+      addLog('Webhook-Verifizierung fehlgeschlagen: Ungültiger Token', LogType.ERROR);
       return res.status(403).json({ error: 'Ungültiger Token' });
     }
 
     // Webhook Handler
     if (req.method === 'POST') {
-      addLog('=== WEBHOOK PAYLOAD ===', 'info');
-      addLog(JSON.stringify(req.body, null, 2), 'info');
+      addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
+      addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
 
       // Bestätige Empfang sofort
       res.status(200).send('OK');
@@ -226,71 +222,71 @@ export default async function handler(req, res) {
             const from = message.from;
             
             if (text.startsWith('hey meta') && text.includes('message to')) {
-              addLog('=== META BEFEHL EMPFANGEN ===', 'info');
-              addLog(`Text: ${text}`, 'info');
-              addLog(`Von: ${from}`, 'info');
+              addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
+              addLog(`Text: ${text}`, LogType.INFO);
+              addLog(`Von: ${from}`, LogType.INFO);
               
               const content = text.split('message to')[1].trim();
               
               try {
                 // Sende Bestätigung
-                addLog('Sende Bestätigung...', 'info');
+                addLog('Sende Bestätigung...', LogType.INFO);
                 const confirmSent = await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...');
-                addLog('Bestätigung gesendet:', confirmSent, 'success');
+                addLog('Bestätigung gesendet:', confirmSent, LogType.SUCCESS);
                 
                 if (!confirmSent) {
                   throw new Error('Konnte Bestätigung nicht senden');
                 }
                 
                 // Hole OpenAI Antwort
-                addLog('Hole OpenAI Antwort...', 'info');
+                addLog('Hole OpenAI Antwort...', LogType.INFO);
                 const response = await getOpenAIResponse(content);
-                addLog('OpenAI Antwort erhalten:', response, 'success');
+                addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
                 
                 // Sende Antwort
-                addLog('Sende finale Antwort...', 'info');
+                addLog('Sende finale Antwort...', LogType.INFO);
                 const finalSent = await sendWhatsAppMessageWithRetry(from, response);
-                addLog('Finale Antwort gesendet:', finalSent, 'success');
+                addLog('Finale Antwort gesendet:', finalSent, LogType.SUCCESS);
                 
                 if (!finalSent) {
                   throw new Error('Konnte finale Antwort nicht senden');
                 }
                 
-                addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', 'success');
+                addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
               } catch (error) {
-                addLog('=== VERARBEITUNGSFEHLER ===', 'error');
-                addLog(`Fehlertyp: ${error.name}`, 'error');
-                addLog(`Fehlermeldung: ${error.message}`, 'error');
-                addLog(`Stack: ${error.stack}`, 'error');
+                addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
+                addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+                addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                addLog(`Stack: ${error.stack}`, LogType.ERROR);
                 if (error.cause) {
-                  addLog('Ursache:', error.cause, 'info');
+                  addLog('Ursache:', error.cause, LogType.INFO);
                 }
                 
                 await sendWhatsAppMessageWithRetry(from, 
                   'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. ' +
                   'Bitte versuchen Sie es später erneut.'
                 ).catch(err => {
-                  addLog('Fehler beim Senden der Fehlermeldung:', err, 'error');
+                  addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
                 });
               }
             }
           }
         }
       } catch (error) {
-        addLog('=== WEBHOOK FEHLER ===', 'error');
-        addLog(`Fehlertyp: ${error.name}`, 'error');
-        addLog(`Fehlermeldung: ${error.message}`, 'error');
-        addLog(`Stack: ${error.stack}`, 'error');
+        addLog('=== WEBHOOK FEHLER ===', LogType.ERROR);
+        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+        addLog(`Stack: ${error.stack}`, LogType.ERROR);
         if (error.cause) {
-          addLog('Ursache:', error.cause, 'info');
+          addLog('Ursache:', error.cause, LogType.INFO);
         }
       }
     }
 
     return res.status(405).end();
   } catch (error) {
-    addLog(`Webhook-Fehler: ${error.message}`, 'error');
-    addLog(`Stack: ${error.stack}`, 'error');
+    addLog(`Webhook-Fehler: ${error.message}`, LogType.ERROR);
+    addLog(`Stack: ${error.stack}`, LogType.ERROR);
     console.error('Webhook-Fehler:', error);
     
     // Sende detaillierte Fehlerinformationen nur in der Entwicklungsumgebung
