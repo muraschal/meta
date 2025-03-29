@@ -1,20 +1,15 @@
 import axios from 'axios';
+import tokenManager from './token-manager.js';
 
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
-    this.accessToken = process.env.META_ACCESS_TOKEN;
   }
 
   async sendMessage(to, message, phoneNumberId, type = 'text') {
     try {
-      console.log('Sende WhatsApp Nachricht:', {
-        to,
-        message,
-        phoneNumberId,
-        type
-      });
-
+      const token = await tokenManager.getCurrentToken();
+      
       const response = await axios.post(
         `${this.baseUrl}/${phoneNumberId}/messages`,
         {
@@ -25,13 +20,11 @@ class WhatsAppService {
         },
         {
           headers: {
-            Authorization: `Bearer ${this.accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
       );
-
-      console.log('WhatsApp API Antwort:', response.data);
       return response.data;
     } catch (error) {
       console.error('Fehler beim Senden der WhatsApp-Nachricht:', {
@@ -45,6 +38,8 @@ class WhatsAppService {
 
   async sendImage(to, imageUrl, phoneNumberId, caption = '') {
     try {
+      const token = await tokenManager.getCurrentToken();
+      
       const response = await axios.post(
         `${this.baseUrl}/${phoneNumberId}/messages`,
         {
@@ -58,7 +53,7 @@ class WhatsAppService {
         },
         {
           headers: {
-            Authorization: `Bearer ${this.accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }

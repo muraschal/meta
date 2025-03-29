@@ -2,10 +2,12 @@ import OpenAI from 'openai';
 import https from 'https';
 import { addLog, LogType } from './utils/logs.js';
 import whatsappService from '../src/services/whatsapp.js';
+import tokenManager from '../src/services/token-manager.js';
 
 // Prüfe erforderliche Umgebungsvariablen
 const requiredEnvVars = [
-    'META_ACCESS_TOKEN',
+    'META_APP_ID',
+    'META_APP_SECRET',
     'WEBHOOK_VERIFY_TOKEN',
     'OPENAI_API_KEY',
     'OPENAI_ORG_ID'
@@ -24,6 +26,12 @@ if (missingEnvVars.length > 0) {
     console.error('Fehlende Umgebungsvariablen:', missingEnvVars);
     throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
 }
+
+// Initialisiere Token-Manager
+await tokenManager.initialize().catch(error => {
+    console.error('Fehler bei Token-Manager-Initialisierung:', error);
+    throw error;
+});
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
