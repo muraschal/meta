@@ -4,13 +4,12 @@ class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
     this.accessToken = process.env.META_ACCESS_TOKEN;
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   }
 
   async sendMessage(to, message, type = 'text') {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/${this.phoneNumberId}/messages`,
+        `${this.baseUrl}/me/messages`,
         {
           messaging_product: 'whatsapp',
           to,
@@ -34,7 +33,7 @@ class WhatsAppService {
   async sendImage(to, imageUrl, caption = '') {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/${this.phoneNumberId}/messages`,
+        `${this.baseUrl}/me/messages`,
         {
           messaging_product: 'whatsapp',
           to,

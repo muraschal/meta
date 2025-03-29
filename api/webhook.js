@@ -9,10 +9,8 @@ dotenv.config();
 // Prüfe erforderliche Umgebungsvariablen
 const requiredEnvVars = [
     'META_ACCESS_TOKEN',
-    'WHATSAPP_PHONE_NUMBER_ID',
-    'WHATSAPP_BUSINESS_ACCOUNT_ID',
-    'OPENAI_API_KEY',
-    'WEBHOOK_VERIFY_TOKEN'
+    'WEBHOOK_VERIFY_TOKEN',
+    'OPENAI_API_KEY'
 ];
 
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -72,7 +70,6 @@ async function sendWhatsAppMessageWithRetry(to, message, maxRetries = 3) {
       addLog(`An: ${to}`, LogType.INFO);
       addLog(`Nachricht: ${message}`, LogType.INFO);
       addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
-      addLog(`Phone ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID}`, LogType.INFO);
 
       const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
       addLog(`URL: ${url}`, LogType.INFO);
@@ -193,6 +190,7 @@ export default async function handler(req, res) {
         addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
         addLog(`Methode: ${req.method}`, LogType.INFO);
         addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
+        addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
 
         // Webhook Verification
         if (req.method === 'GET') {
