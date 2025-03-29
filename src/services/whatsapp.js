@@ -6,10 +6,10 @@ class WhatsAppService {
     this.accessToken = process.env.META_ACCESS_TOKEN;
   }
 
-  async sendMessage(to, message, type = 'text') {
+  async sendMessage(to, message, phoneNumberId, type = 'text') {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/me/messages`,
+        `${this.baseUrl}/${phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
           to,
@@ -30,10 +30,10 @@ class WhatsAppService {
     }
   }
 
-  async sendImage(to, imageUrl, caption = '') {
+  async sendImage(to, imageUrl, phoneNumberId, caption = '') {
     try {
       const response = await axios.post(
-        `${this.baseUrl}/me/messages`,
+        `${this.baseUrl}/${phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
           to,
@@ -59,18 +59,43 @@ class WhatsAppService {
 
   async handleWebhook(payload) {
     // Verarbeitung der eingehenden Webhook-Nachrichten
-    const entry = payload.entry[0];
-    const changes = entry.changes[0];
-    const value = changes.value;
-    const message = value.messages[0];
+    if (!payload?.entry?.[0]?.changes?.[0]?.value) {
+      throw new Error('Ungültige Webhook-Payload-Struktur');
+    }
 
-    return {
-      from: message.from,
-      type: message.type,
-      content: message.text?.body || '',
-      mediaUrl: message.image?.link || '',
-      timestamp: message.timestamp,
-    };
+    const value = payload.entry[0].changes[0].value;
+    
+    // Wenn es eine Status-Update-Nachricht ist
+    if (value.statuses) {
+      return {
+        type: 'status',
+        status: value.statuses[0]
+      };
+    }
+
+    // Wenn es eine eingehende Nachricht ist
+    if (value.messages) {
+      const message = value.messages[0];
+      return {
+        from: message.from,
+        type: message.type,
+        content: message.text?.body || '',
+        mediaUrl: message.image?.link || '',
+        timestamp: message.timestamp,
+        phoneNumberId: value.metadata?.phone_number_id
+      };
+    }
+
+    // Wenn es eine Metadaten-Update-Nachricht ist
+    if (value.metadata) {
+      return {
+        type: 'metadata',
+        phoneNumberId: value.metadata.phone_number_id,
+        displayPhoneNumber: value.metadata.display_phone_number
+      };
+    }
+
+    throw new Error('Unbekannter Webhook-Payload-Typ');
   }
 }
 
