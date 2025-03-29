@@ -211,76 +211,39 @@ export default async function handler(req, res) {
                     return;
                 }
 
-                const text = content.toLowerCase();
-                if (text.startsWith('hey meta') && text.includes('message to')) {
-                    addLog('=== META BEFEHL EMPFANGEN ===', LogType.INFO);
-                    addLog(`Text: ${text}`, LogType.INFO);
-                    addLog(`Von: ${from}`, LogType.INFO);
-                    addLog(`Phone Number ID: ${phoneNumberId}`, LogType.INFO);
+                addLog('=== NACHRICHT EMPFANGEN ===', LogType.INFO);
+                addLog(`Text: ${content}`, LogType.INFO);
+                addLog(`Von: ${from}`, LogType.INFO);
+                addLog(`Phone Number ID: ${phoneNumberId}`, LogType.INFO);
+                
+                try {
+                    // Sende Bestätigung
+                    addLog('Sende Bestätigung...', LogType.INFO);
+                    await sendWhatsAppMessageWithRetry(from, 'I am processing your request...', phoneNumberId);
                     
-                    const messageContent = text.split('message to')[1].trim();
-                    addLog(`Verarbeiteter Inhalt: ${messageContent}`, LogType.INFO);
+                    // Hole OpenAI Antwort
+                    addLog('Hole OpenAI Antwort...', LogType.INFO);
+                    const response = await getOpenAIResponse(content);
+                    addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
+
+                    // Sende Antwort
+                    addLog('Sende finale Antwort...', LogType.INFO);
+                    await sendWhatsAppMessageWithRetry(from, response, phoneNumberId);
                     
-                    try {
-                        // Sende Bestätigung
-                        addLog('Sende Bestätigung...', LogType.INFO);
-                        await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...', phoneNumberId);
-                        
-                        // Verarbeite die Nachricht
-                        const processedData = {
-                          from: from,
-                          type: 'text',
-                          content: messageContent,
-                          mediaUrl: '',
-                          timestamp: new Date().toISOString(),
-                          phoneNumberId: phoneNumberId
-                        };
-                        
-                        console.log('Verarbeitete Webhook-Daten:', processedData);
-
-                        // Sende die Nachricht an OpenAI
-                        try {
-                          const openaiResponse = await openai.chat.completions.create({
-                            model: "gpt-4",
-                            messages: [{ 
-                              role: "system", 
-                              content: "You are a helpful assistant providing precise and informative answers. Always respond in English." 
-                            },
-                            { 
-                              role: "user", 
-                              content: processedData.content 
-                            }],
-                            temperature: 0.7,
-                            max_tokens: 150
-                          });
-
-                          const responseText = openaiResponse.choices[0].message.content;
-                          console.log('OpenAI Antwort:', responseText);
-
-                          // Sende die Antwort zurück
-                          await sendWhatsAppMessageWithRetry(from, responseText, phoneNumberId);
-                        } catch (error) {
-                          console.error('Fehler bei OpenAI API:', error);
-                          await sendWhatsAppMessageWithRetry(from, "I apologize, but I encountered an error processing your request. Please try again later.", phoneNumberId);
-                        }
-                        
-                        addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
-                    } catch (error) {
-                        addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
-                        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-                        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-                        addLog(`Stack: ${error.stack}`, LogType.ERROR);
-                        
-                        await sendWhatsAppMessageWithRetry(
-                            from, 
-                            'Entschuldigung, es gab ein Problem bei der Verarbeitung Ihrer Anfrage. Bitte versuchen Sie es später erneut.',
-                            phoneNumberId
-                        ).catch(err => {
-                            addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
-                        });
-                    }
-                } else {
-                    addLog('Kein gültiger Meta-Befehl erkannt', LogType.INFO);
+                    addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
+                } catch (error) {
+                    addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
+                    addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+                    addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                    addLog(`Stack: ${error.stack}`, LogType.ERROR);
+                    
+                    await sendWhatsAppMessageWithRetry(
+                        from, 
+                        'I apologize, but I encountered an error processing your request. Please try again later.',
+                        phoneNumberId
+                    ).catch(err => {
+                        addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
+                    });
                 }
             } catch (error) {
                 addLog('Fehler bei der Webhook-Verarbeitung:', error, LogType.ERROR);
