@@ -11,7 +11,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages`,
+        `${this.baseUrl}/1233067364910106/messages`,
         {
           messaging_product: 'whatsapp',
           to,
@@ -41,7 +41,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages`,
+        `${this.baseUrl}/1233067364910106/messages`,
         {
           messaging_product: 'whatsapp',
           to,
