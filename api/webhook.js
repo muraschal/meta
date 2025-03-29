@@ -226,14 +226,43 @@ export default async function handler(req, res) {
                         addLog('Sende Bestätigung...', LogType.INFO);
                         await sendWhatsAppMessageWithRetry(from, 'Ich verarbeite Ihre Anfrage...', phoneNumberId);
                         
-                        // Hole OpenAI Antwort
-                        addLog('Hole OpenAI Antwort...', LogType.INFO);
-                        const response = await getOpenAIResponse(messageContent);
-                        addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
+                        // Verarbeite die Nachricht
+                        const processedData = {
+                          from: from,
+                          type: 'text',
+                          content: messageContent,
+                          mediaUrl: '',
+                          timestamp: new Date().toISOString(),
+                          phoneNumberId: phoneNumberId
+                        };
                         
-                        // Sende Antwort
-                        addLog('Sende finale Antwort...', LogType.INFO);
-                        await sendWhatsAppMessageWithRetry(from, response, phoneNumberId);
+                        console.log('Verarbeitete Webhook-Daten:', processedData);
+
+                        // Sende die Nachricht an OpenAI
+                        try {
+                          const openaiResponse = await openai.chat.completions.create({
+                            model: "gpt-4",
+                            messages: [{ 
+                              role: "system", 
+                              content: "You are a helpful assistant providing precise and informative answers. Always respond in English." 
+                            },
+                            { 
+                              role: "user", 
+                              content: processedData.content 
+                            }],
+                            temperature: 0.7,
+                            max_tokens: 150
+                          });
+
+                          const responseText = openaiResponse.choices[0].message.content;
+                          console.log('OpenAI Antwort:', responseText);
+
+                          // Sende die Antwort zurück
+                          await sendWhatsAppMessageWithRetry(from, responseText, phoneNumberId);
+                        } catch (error) {
+                          console.error('Fehler bei OpenAI API:', error);
+                          await sendWhatsAppMessageWithRetry(from, "I apologize, but I encountered an error processing your request. Please try again later.", phoneNumberId);
+                        }
                         
                         addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
                     } catch (error) {
