@@ -156,7 +156,8 @@ export default async function handler(req, res) {
         addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
         addLog(`Methode: ${req.method}`, LogType.INFO);
         addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
-        addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
+        const currentToken = await tokenManager.getCurrentToken();
+        addLog(`Token (erste 10 Zeichen): ${currentToken?.substring(0, 10)}...`, LogType.INFO);
 
         // Webhook Verification
         if (req.method === 'GET') {
@@ -194,7 +195,8 @@ export default async function handler(req, res) {
             addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
             addLog(`Methode: ${req.method}`, LogType.INFO);
             addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
-            addLog(`Token (erste 10 Zeichen): ${process.env.META_ACCESS_TOKEN?.substring(0, 10)}...`, LogType.INFO);
+            const currentToken = await tokenManager.getCurrentToken();
+            addLog(`Token (erste 10 Zeichen): ${currentToken?.substring(0, 10)}...`, LogType.INFO);
 
             addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
             addLog(JSON.stringify(req.body, null, 2), LogType.INFO);

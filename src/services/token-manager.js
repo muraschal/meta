@@ -49,8 +49,12 @@ class TokenManager {
                 clearTimeout(this.refreshTimeout);
             }
             
+            // Maximaler Timeout ist 2147483647 (ca. 24.8 Tage)
+            const MAX_TIMEOUT = 2147483647;
             // Erneuere 5 Minuten vor Ablauf
-            const refreshIn = (expiresIn - 300) * 1000;
+            const desiredRefreshIn = (expiresIn - 300) * 1000;
+            const refreshIn = Math.min(desiredRefreshIn, MAX_TIMEOUT);
+            
             this.refreshTimeout = setTimeout(() => this.refreshToken(), refreshIn);
 
             console.log('Token erfolgreich aktualisiert. Nächste Aktualisierung in', Math.floor(refreshIn / 1000 / 60), 'Minuten');
