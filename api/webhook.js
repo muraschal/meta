@@ -32,7 +32,8 @@ process.on('uncaughtException', (error) => {
 });
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
+  organization: 'org-dMfSlIWIF10YN8fVK6pMcEH6'
 });
 
 // HTTPS Agent für besseres SSL-Handling
