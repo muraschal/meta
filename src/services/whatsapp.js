@@ -4,6 +4,7 @@ import tokenManager from './token-manager.js';
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
+    this.businessAccountId = '1233067364910106';
   }
 
   async sendMessage(to, message, phoneNumberId, type = 'text') {
@@ -11,7 +12,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages?access_token=${token}`,
+        `${this.baseUrl}/${this.businessAccountId}/messages?access_token=${token}`,
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -41,7 +42,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages?access_token=${token}`,
+        `${this.baseUrl}/${this.businessAccountId}/messages?access_token=${token}`,
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
