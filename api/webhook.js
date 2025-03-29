@@ -143,14 +143,19 @@ export default async function handler(req, res) {
 
             addLog(`Verifizierungsdetails: Mode=${mode}, Token=${token ? '***' : 'fehlt'}, Challenge=${challenge || 'fehlt'}`, LogType.INFO);
 
-            if (!mode || !token) {
-                addLog('Fehlende Parameter für Webhook-Verifizierung', LogType.ERROR);
-                return res.status(400).json({ error: 'Fehlende Parameter' });
+            // Wenn es eine normale GET-Anfrage ist (z.B. Health Check)
+            if (!mode && !token) {
+                addLog('Health Check GET-Anfrage', LogType.INFO);
+                return res.status(200).json({ status: 'ok' });
             }
 
+            // Wenn es eine Webhook-Verifizierung ist
             if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
                 addLog('Webhook erfolgreich verifiziert', LogType.SUCCESS);
-                return res.status(200).send(challenge);
+                if (challenge) {
+                    return res.status(200).send(challenge);
+                }
+                return res.status(200).json({ status: 'verified' });
             }
 
             addLog('Webhook-Verifizierung fehlgeschlagen - Ungültiger Token', LogType.ERROR);
