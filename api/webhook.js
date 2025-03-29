@@ -96,7 +96,7 @@ async function getOpenAIResponse(content) {
       model: "gpt-4",
       messages: [{ 
         role: "system", 
-        content: "Du bist ein hilfreicher Assistent, der präzise und informative Antworten gibt. Antworte immer auf Deutsch." 
+        content: "You are a helpful assistant providing precise and informative answers. Always respond in English." 
       },
       { 
         role: "user", 
