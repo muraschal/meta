@@ -4,28 +4,27 @@ import tokenManager from './token-manager.js';
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
-    this.businessAccountId = '1233067364910106';
+    this.phoneNumberId = '637450429443686';
   }
 
-  async sendMessage(to, message, phoneNumberId, type = 'text') {
+  async sendMessage(to, message, phoneNumberId = this.phoneNumberId, type = 'text') {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const response = await axios.post(
-        `${this.baseUrl}/${this.businessAccountId}/messages?access_token=${token}`,
-        {
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/${phoneNumberId || this.phoneNumberId}/messages`,
+        params: { access_token: token },
+        headers: { 'Content-Type': 'application/json' },
+        data: {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to,
           type,
-          ...(type === 'text' ? { text: { body: message } } : {}),
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          ...(type === 'text' ? { text: { body: message } } : {})
         }
-      );
+      });
+      
       return response.data;
     } catch (error) {
       console.error('Fehler beim Senden der WhatsApp-Nachricht:', {
@@ -37,13 +36,16 @@ class WhatsAppService {
     }
   }
 
-  async sendImage(to, imageUrl, phoneNumberId, caption = '') {
+  async sendImage(to, imageUrl, phoneNumberId = this.phoneNumberId, caption = '') {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const response = await axios.post(
-        `${this.baseUrl}/${this.businessAccountId}/messages?access_token=${token}`,
-        {
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/${phoneNumberId || this.phoneNumberId}/messages`,
+        params: { access_token: token },
+        headers: { 'Content-Type': 'application/json' },
+        data: {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to,
@@ -51,14 +53,10 @@ class WhatsAppService {
           image: {
             link: imageUrl,
             caption,
-          },
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          }
         }
-      );
+      });
+      
       return response.data;
     } catch (error) {
       console.error('Fehler beim Senden des WhatsApp-Bildes:', error);
