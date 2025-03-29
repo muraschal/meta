@@ -5,32 +5,61 @@ class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
     this.phoneNumberId = '637450429443686';
+    this.businessAccountId = '1233067364910106';
+    this.apiVersion = 'v17.0'; // Aktuelle Graph API-Version
   }
 
   async sendMessage(to, message, phoneNumberId = this.phoneNumberId, type = 'text') {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const response = await axios({
-        method: 'post',
-        url: `${this.baseUrl}/${phoneNumberId || this.phoneNumberId}/messages`,
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' },
-        data: {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to,
-          type,
-          ...(type === 'text' ? { text: { body: message } } : {})
-        }
-      });
+      // Varianten für URL ausprobieren
+      const endpoints = [
+        // Variante 1: Direkt an die Business ID
+        `${this.baseUrl}/${this.businessAccountId}/messages`,
+        // Variante 2: Mit Phone Number ID
+        `${this.baseUrl}/${phoneNumberId}/messages`,
+        // Variante 3: Expliziter API-Pfad
+        `https://graph.facebook.com/${this.apiVersion}/${this.businessAccountId}/messages`
+      ];
       
-      return response.data;
+      let lastError = null;
+      
+      // Versuche verschiedene Endpunkte
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`Versuche Endpunkt: ${endpoint}`);
+          
+          const response = await axios({
+            method: 'post',
+            url: endpoint,
+            params: { access_token: token },
+            headers: { 'Content-Type': 'application/json' },
+            data: {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to,
+              type,
+              ...(type === 'text' ? { text: { body: message } } : {})
+            },
+            timeout: 10000
+          });
+          
+          console.log(`Erfolgreiche Antwort von: ${endpoint}`);
+          return response.data;
+        } catch (err) {
+          console.log(`Fehler bei Endpunkt ${endpoint}:`, err.message);
+          lastError = err;
+        }
+      }
+      
+      throw lastError || new Error('Alle Endpunkte fehlgeschlagen');
     } catch (error) {
       console.error('Fehler beim Senden der WhatsApp-Nachricht:', {
         error: error.message,
         response: error.response?.data,
-        status: error.response?.status
+        status: error.response?.status,
+        url: error.config?.url
       });
       throw error;
     }
@@ -40,24 +69,50 @@ class WhatsAppService {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const response = await axios({
-        method: 'post',
-        url: `${this.baseUrl}/${phoneNumberId || this.phoneNumberId}/messages`,
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' },
-        data: {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to,
-          type: 'image',
-          image: {
-            link: imageUrl,
-            caption,
-          }
-        }
-      });
+      // Varianten für URL ausprobieren
+      const endpoints = [
+        // Variante 1: Direkt an die Business ID
+        `${this.baseUrl}/${this.businessAccountId}/messages`,
+        // Variante 2: Mit Phone Number ID
+        `${this.baseUrl}/${phoneNumberId}/messages`,
+        // Variante 3: Expliziter API-Pfad
+        `https://graph.facebook.com/${this.apiVersion}/${this.businessAccountId}/messages`
+      ];
       
-      return response.data;
+      let lastError = null;
+      
+      // Versuche verschiedene Endpunkte
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`Versuche Endpunkt für Bild: ${endpoint}`);
+          
+          const response = await axios({
+            method: 'post',
+            url: endpoint,
+            params: { access_token: token },
+            headers: { 'Content-Type': 'application/json' },
+            data: {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to,
+              type: 'image',
+              image: {
+                link: imageUrl,
+                caption,
+              }
+            },
+            timeout: 10000
+          });
+          
+          console.log(`Erfolgreiche Bild-Antwort von: ${endpoint}`);
+          return response.data;
+        } catch (err) {
+          console.log(`Fehler bei Bild-Endpunkt ${endpoint}:`, err.message);
+          lastError = err;
+        }
+      }
+      
+      throw lastError || new Error('Alle Bild-Endpunkte fehlgeschlagen');
     } catch (error) {
       console.error('Fehler beim Senden des WhatsApp-Bildes:', error);
       throw error;
