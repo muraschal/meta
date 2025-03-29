@@ -15,7 +15,15 @@ const requiredEnvVars = [
     'OPENAI_ORG_ID'
 ];
 
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+console.log('Verfügbare Umgebungsvariablen:', Object.keys(process.env));
+console.log('OPENAI_ORG_ID Wert:', process.env.OPENAI_ORG_ID);
+
+const missingEnvVars = requiredEnvVars.filter(varName => {
+    const exists = !!process.env[varName];
+    console.log(`Prüfe ${varName}: ${exists ? 'vorhanden' : 'fehlt'}`);
+    return !exists;
+});
+
 if (missingEnvVars.length > 0) {
     console.error('Fehlende Umgebungsvariablen:', missingEnvVars);
     throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
@@ -34,7 +42,7 @@ process.on('uncaughtException', (error) => {
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  organization: process.env.OPENAI_ORG_ID
+  ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID })
 });
 
 // HTTPS Agent für besseres SSL-Handling
