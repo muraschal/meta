@@ -77,8 +77,9 @@ class WhatsAppService {
     if (value.messages) {
       const message = value.messages[0];
       return {
+        type: 'message',
         from: message.from,
-        type: message.type,
+        messageType: message.type,
         content: message.text?.body || '',
         mediaUrl: message.image?.link || '',
         timestamp: message.timestamp,
