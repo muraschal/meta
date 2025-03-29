@@ -11,7 +11,8 @@ dotenv.config();
 const requiredEnvVars = [
     'META_ACCESS_TOKEN',
     'WEBHOOK_VERIFY_TOKEN',
-    'OPENAI_API_KEY'
+    'OPENAI_API_KEY',
+    'OPENAI_ORG_ID'
 ];
 
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -33,7 +34,7 @@ process.on('uncaughtException', (error) => {
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  organization: 'org-dMfSlIWIF10YN8fVK6pMcEH6'
+  organization: process.env.OPENAI_ORG_ID
 });
 
 // HTTPS Agent für besseres SSL-Handling
