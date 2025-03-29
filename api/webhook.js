@@ -90,12 +90,13 @@ async function getOpenAIResponse(content) {
   try {
     addLog('=== OPENAI ANFRAGE ===', LogType.INFO);
     addLog(`Inhalt: ${content}`, LogType.INFO);
+    addLog(`OpenAI API Key (erste 5 Zeichen): ${process.env.OPENAI_API_KEY?.substring(0, 5)}...`, LogType.INFO);
     
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ 
         role: "system", 
-        content: "Du bist ein hilfreicher Assistent, der präzise und informative Antworten gibt." 
+        content: "Du bist ein hilfreicher Assistent, der präzise und informative Antworten gibt. Antworte immer auf Deutsch." 
       },
       { 
         role: "user", 
@@ -105,9 +106,15 @@ async function getOpenAIResponse(content) {
       temperature: 0.7
     });
 
-    const response = completion?.choices?.[0]?.message?.content;
+    if (!completion?.choices?.[0]?.message?.content) {
+      addLog('Keine gültige Antwort von OpenAI erhalten', LogType.ERROR);
+      addLog(`OpenAI Response: ${JSON.stringify(completion)}`, LogType.ERROR);
+      throw new Error('Keine gültige Antwort von OpenAI erhalten');
+    }
+
+    const response = completion.choices[0].message.content;
     addLog(`OpenAI Antwort: ${response}`, LogType.SUCCESS);
-    return response || 'Keine Antwort von OpenAI erhalten';
+    return response;
   } catch (error) {
     addLog('=== OPENAI FEHLER ===', LogType.ERROR);
     addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
