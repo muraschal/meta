@@ -8,6 +8,13 @@ class WhatsAppService {
 
   async sendMessage(to, message, phoneNumberId, type = 'text') {
     try {
+      console.log('Sende WhatsApp Nachricht:', {
+        to,
+        message,
+        phoneNumberId,
+        type
+      });
+
       const response = await axios.post(
         `${this.baseUrl}/${phoneNumberId}/messages`,
         {
@@ -23,9 +30,15 @@ class WhatsAppService {
           },
         }
       );
+
+      console.log('WhatsApp API Antwort:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Fehler beim Senden der WhatsApp-Nachricht:', error);
+      console.error('Fehler beim Senden der WhatsApp-Nachricht:', {
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw error;
     }
   }
