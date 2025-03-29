@@ -1,11 +1,7 @@
 import OpenAI from 'openai';
 import https from 'https';
 import { addLog, LogType } from './utils/logs.js';
-import dotenv from 'dotenv';
 import whatsappService from '../src/services/whatsapp.js';
-
-// Lade Umgebungsvariablen
-dotenv.config();
 
 // Prüfe erforderliche Umgebungsvariablen
 const requiredEnvVars = [
