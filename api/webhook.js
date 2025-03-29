@@ -204,48 +204,47 @@ export default async function handler(req, res) {
                     return;
                 }
 
-                if (webhookData.type === 'message') {
-                    const { from, content, phoneNumberId } = webhookData;
-                    
-                    if (!content) {
-                        addLog('Keine Nachricht im Webhook gefunden', LogType.INFO);
-                        return;
-                    }
+                // Verarbeite die Nachricht
+                const { from, content, phoneNumberId } = webhookData;
+                
+                if (!content) {
+                    addLog('Keine Nachricht im Webhook gefunden', LogType.INFO);
+                    return;
+                }
 
-                    addLog('=== NACHRICHT EMPFANGEN ===', LogType.INFO);
-                    addLog(`Text: ${content}`, LogType.INFO);
-                    addLog(`Von: ${from}`, LogType.INFO);
-                    addLog(`Phone Number ID: ${phoneNumberId}`, LogType.INFO);
+                addLog('=== NACHRICHT EMPFANGEN ===', LogType.INFO);
+                addLog(`Text: ${content}`, LogType.INFO);
+                addLog(`Von: ${from}`, LogType.INFO);
+                addLog(`Phone Number ID: ${phoneNumberId}`, LogType.INFO);
+                
+                try {
+                    // Sende Bestätigung
+                    addLog('Sende Bestätigung...', LogType.INFO);
+                    await sendWhatsAppMessageWithRetry(from, 'I am processing your request...', phoneNumberId);
                     
-                    try {
-                        // Sende Bestätigung
-                        addLog('Sende Bestätigung...', LogType.INFO);
-                        await sendWhatsAppMessageWithRetry(from, 'I am processing your request...', phoneNumberId);
-                        
-                        // Hole OpenAI Antwort
-                        addLog('Hole OpenAI Antwort...', LogType.INFO);
-                        const response = await getOpenAIResponse(content);
-                        addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
+                    // Hole OpenAI Antwort
+                    addLog('Hole OpenAI Antwort...', LogType.INFO);
+                    const response = await getOpenAIResponse(content);
+                    addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
 
-                        // Sende Antwort
-                        addLog('Sende finale Antwort...', LogType.INFO);
-                        await sendWhatsAppMessageWithRetry(from, response, phoneNumberId);
-                        
-                        addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
-                    } catch (error) {
-                        addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
-                        addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-                        addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-                        addLog(`Stack: ${error.stack}`, LogType.ERROR);
-                        
-                        await sendWhatsAppMessageWithRetry(
-                            from, 
-                            'I apologize, but I encountered an error processing your request. Please try again later.',
-                            phoneNumberId
-                        ).catch(err => {
-                            addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
-                        });
-                    }
+                    // Sende Antwort
+                    addLog('Sende finale Antwort...', LogType.INFO);
+                    await sendWhatsAppMessageWithRetry(from, response, phoneNumberId);
+                    
+                    addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
+                } catch (error) {
+                    addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
+                    addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
+                    addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
+                    addLog(`Stack: ${error.stack}`, LogType.ERROR);
+                    
+                    await sendWhatsAppMessageWithRetry(
+                        from, 
+                        'I apologize, but I encountered an error processing your request. Please try again later.',
+                        phoneNumberId
+                    ).catch(err => {
+                        addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
+                    });
                 }
             } catch (error) {
                 addLog('Fehler bei der Webhook-Verarbeitung:', error, LogType.ERROR);
