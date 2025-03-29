@@ -192,82 +192,44 @@ export default async function handler(req, res) {
             // Bestätige Empfang sofort
             res.status(200).json({ status: 'ok' });
 
-            addLog('=== WEBHOOK HANDLER START ===', LogType.INFO);
-            addLog(`Methode: ${req.method}`, LogType.INFO);
-            addLog(`Headers: ${JSON.stringify(req.headers, null, 2)}`, LogType.INFO);
-            const currentToken = await tokenManager.getCurrentToken();
-            addLog(`Token (erste 10 Zeichen): ${currentToken?.substring(0, 10)}...`, LogType.INFO);
-
-            addLog('=== WEBHOOK PAYLOAD ===', LogType.INFO);
-            addLog(JSON.stringify(req.body, null, 2), LogType.INFO);
-
-            const { body } = req;
+            addLog('=== NEUE NACHRICHT EMPFANGEN ===', LogType.INFO);
             
-            if (!body?.object || body.object !== 'whatsapp_business_account') {
-                addLog('Ungültiges Webhook-Objekt', LogType.ERROR);
-                addLog(`Erhaltenes Objekt: ${body?.object}`, LogType.ERROR);
-                return;
-            }
+            const webhookData = await whatsappService.handleWebhook(req.body);
+            addLog(`Typ: ${webhookData.type}`, LogType.INFO);
 
-            try {
-                const webhookData = await whatsappService.handleWebhook(body);
-                addLog(`Verarbeitete Webhook-Daten: ${JSON.stringify(webhookData)}`, LogType.INFO);
-
-                if (webhookData.type === 'metadata') {
-                    addLog('Metadaten-Update empfangen', LogType.INFO);
-                    return;
-                }
-
-                if (webhookData.type === 'status') {
-                    addLog('Status-Update empfangen', LogType.INFO);
-                    return;
-                }
-
-                // Verarbeite die Nachricht
-                const { from, content, phoneNumberId } = webhookData;
-                
-                if (!content) {
-                    addLog('Keine Nachricht im Webhook gefunden', LogType.INFO);
-                    return;
-                }
-
-                addLog('=== NACHRICHT EMPFANGEN ===', LogType.INFO);
-                addLog(`Text: ${content}`, LogType.INFO);
-                addLog(`Von: ${from}`, LogType.INFO);
-                addLog(`Phone Number ID: ${phoneNumberId}`, LogType.INFO);
+            if (webhookData.type === 'message') {
+                addLog(`Von: ${webhookData.from}`, LogType.INFO);
+                addLog(`Text: ${webhookData.content}`, LogType.INFO);
                 
                 try {
                     // Sende Bestätigung
-                    addLog('Sende Bestätigung...', LogType.INFO);
-                    await sendWhatsAppMessageWithRetry(from, 'I am processing your request...', phoneNumberId);
-                    
-                    // Hole OpenAI Antwort
-                    addLog('Hole OpenAI Antwort...', LogType.INFO);
-                    const response = await getOpenAIResponse(content);
-                    addLog('OpenAI Antwort erhalten:', response, LogType.SUCCESS);
-
-                    // Sende Antwort
-                    addLog('Sende finale Antwort...', LogType.INFO);
-                    await sendWhatsAppMessageWithRetry(from, response, phoneNumberId);
-                    
-                    addLog('=== VERARBEITUNG ABGESCHLOSSEN ===', LogType.SUCCESS);
-                } catch (error) {
-                    addLog('=== VERARBEITUNGSFEHLER ===', LogType.ERROR);
-                    addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
-                    addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
-                    addLog(`Stack: ${error.stack}`, LogType.ERROR);
-                    
                     await sendWhatsAppMessageWithRetry(
-                        from, 
-                        'I apologize, but I encountered an error processing your request. Please try again later.',
-                        phoneNumberId
-                    ).catch(err => {
-                        addLog('Fehler beim Senden der Fehlermeldung:', err, LogType.ERROR);
-                    });
+                        webhookData.from,
+                        'I am processing your request...',
+                        webhookData.phoneNumberId
+                    );
+                    addLog('✓ Bestätigung gesendet', LogType.SUCCESS);
+
+                    // Hole OpenAI Antwort
+                    addLog('Generiere OpenAI Antwort...', LogType.INFO);
+                    const aiResponse = await getOpenAIResponse(webhookData.content);
+                    addLog('✓ OpenAI Antwort generiert', LogType.SUCCESS);
+
+                    // Sende finale Antwort
+                    await sendWhatsAppMessageWithRetry(
+                        webhookData.from,
+                        aiResponse,
+                        webhookData.phoneNumberId
+                    );
+                    addLog('✓ Finale Antwort gesendet', LogType.SUCCESS);
+                } catch (error) {
+                    addLog(`Fehler bei der Nachrichtenverarbeitung: ${error.message}`, LogType.ERROR);
+                    throw error;
                 }
-            } catch (error) {
-                addLog('Fehler bei der Webhook-Verarbeitung:', error, LogType.ERROR);
+            } else if (webhookData.type === 'metadata') {
+                addLog('Metadaten-Update empfangen', LogType.INFO);
             }
+
             return;
         }
 

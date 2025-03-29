@@ -1,14 +1,25 @@
 // Log-Typen
 export const LogType = {
-    INFO: 'info',
-    ERROR: 'error',
-    SUCCESS: 'success',
-    WARNING: 'warning'
+    INFO: 'INFO',
+    SUCCESS: 'SUCCESS',
+    ERROR: 'ERROR',
 };
 
 // In-Memory Log Cache
 let logCache = [];
 const MAX_LOGS = 1000;
+
+const getLogPrefix = (type) => {
+    switch (type) {
+        case LogType.SUCCESS:
+            return '✅';
+        case LogType.ERROR:
+            return '❌';
+        case LogType.INFO:
+        default:
+            return 'ℹ️';
+    }
+};
 
 /**
  * Fügt einen neuen Log hinzu
@@ -16,26 +27,8 @@ const MAX_LOGS = 1000;
  * @param {string} type - Der Log-Typ (info, error, success, warning)
  */
 export function addLog(message, type = LogType.INFO) {
-    // Validiere den Log-Typ
-    const validTypes = Object.values(LogType);
-    const logType = validTypes.includes(type) ? type : LogType.INFO;
-
-    const logEntry = {
-        timestamp: new Date().toISOString(),
-        message,
-        type: logType
-    };
-
-    // Füge den Log zum Cache hinzu
-    logCache.unshift(logEntry);
-
-    // Begrenze die Cache-Größe
-    if (logCache.length > MAX_LOGS) {
-        logCache = logCache.slice(0, MAX_LOGS);
-    }
-
-    // Gib den Log auch in der Konsole aus
-    console.log(`[${logType.toUpperCase()}] ${message}`);
+    const prefix = getLogPrefix(type);
+    console.log(`${prefix} ${message}`);
 }
 
 /**
