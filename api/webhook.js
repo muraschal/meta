@@ -120,6 +120,9 @@ async function getOpenAIResponse(content) {
     addLog(`Fehlertyp: ${error.name}`, LogType.ERROR);
     addLog(`Fehlermeldung: ${error.message}`, LogType.ERROR);
     addLog(`Stack: ${error.stack}`, LogType.ERROR);
+    if (error.response) {
+      addLog(`OpenAI API Fehler: ${JSON.stringify(error.response.data)}`, LogType.ERROR);
+    }
     throw error;
   }
 }
