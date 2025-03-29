@@ -11,7 +11,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages`,
+        `${this.baseUrl}/${phoneNumberId}/messages?access_token=${token}`,
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -21,7 +21,6 @@ class WhatsAppService {
         },
         {
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -42,7 +41,7 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       
       const response = await axios.post(
-        `${this.baseUrl}/${phoneNumberId}/messages`,
+        `${this.baseUrl}/${phoneNumberId}/messages?access_token=${token}`,
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -55,7 +54,6 @@ class WhatsAppService {
         },
         {
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
