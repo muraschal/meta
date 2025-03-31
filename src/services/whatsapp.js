@@ -81,11 +81,10 @@ class WhatsAppService {
       
       throw lastError || new Error('Alle Endpunkte fehlgeschlagen');
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'Fehler beim Senden der WhatsApp-Nachricht:', {
-        error: error.message,
+      log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', {
+        message: error.message,
         response: error.response?.data,
-        status: error.response?.status,
-        url: error.config?.url
+        status: error.response?.status
       });
       throw error;
     }
@@ -140,7 +139,7 @@ class WhatsAppService {
       
       throw lastError || new Error('Alle Bild-Endpunkte fehlgeschlagen');
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'Fehler beim Senden des WhatsApp-Bildes:', error);
+      log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', error);
       throw error;
     }
   }
