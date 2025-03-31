@@ -4,7 +4,7 @@ import { log, LOG_LEVELS } from '../utils/logger.js';
 
 class MetaTokenService {
     constructor() {
-        this.baseUrl = 'https://graph.facebook.com/v17.0';
+        this.baseUrl = 'https://graph.facebook.com/v22.0';
         this.clientId = META_CONFIG.AUTH.APP_ID;
         this.clientSecret = META_CONFIG.AUTH.APP_SECRET;
         this.accessToken = META_CONFIG.AUTH.ACCESS_TOKEN;
