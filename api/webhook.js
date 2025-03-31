@@ -3,6 +3,7 @@ import https from 'https';
 import whatsappService from '../src/services/whatsapp.js';
 import tokenManager from '../src/services/token-manager.js';
 import openaiService from '../src/services/openai.js';
+import { log, LOG_LEVELS } from '../src/utils/logger.js';
 
 // Prüfe erforderliche Umgebungsvariablen
 const requiredEnvVars = [
@@ -21,11 +22,11 @@ if (missingEnvVars.length > 0) {
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
-    console.error('Unhandled Promise Rejection:', error);
+    log(LOG_LEVELS.ERROR, 'Unhandled Promise Rejection:', error);
 });
 
 process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
+    log(LOG_LEVELS.ERROR, 'Uncaught Exception:', error);
 });
 
 const openai = new OpenAI({
@@ -37,32 +38,6 @@ const openai = new OpenAI({
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false // Nur für Debugging, in Produktion auf true setzen
 });
-
-// Logging-Konfiguration
-const LOG_LEVELS = {
-  DEBUG: 0,
-  INFO: 1,
-  WARN: 2,
-  ERROR: 3
-};
-
-const CURRENT_LOG_LEVEL = LOG_LEVELS.INFO;
-
-function shouldLog(level) {
-  return level >= CURRENT_LOG_LEVEL;
-}
-
-function log(level, ...args) {
-  if (shouldLog(level)) {
-    const prefix = {
-      [LOG_LEVELS.DEBUG]: '🔍',
-      [LOG_LEVELS.INFO]: 'ℹ️',
-      [LOG_LEVELS.WARN]: '⚠️',
-      [LOG_LEVELS.ERROR]: '❌'
-    }[level];
-    console.log(prefix, ...args);
-  }
-}
 
 // Hilfsfunktion für Webhook-Verifizierung
 async function verifyWebhook(req) {

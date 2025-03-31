@@ -1,5 +1,6 @@
 import axios from 'axios';
 import tokenManager from './token-manager.js';
+import { log, LOG_LEVELS } from '../utils/logger.js';
 
 // Logging-Konfiguration
 const LOG_LEVELS = {
