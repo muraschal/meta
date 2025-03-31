@@ -48,9 +48,7 @@ router.post('/', async (req, res) => {
       if (messageType === 'image') {
         const imageUrl = message.image.url;
         log(LOG_LEVELS.INFO, 'Processing image:', { url: imageUrl });
-        // Verarbeite das Bild mit OpenAI Vision
         const response = await openAIService.processMessage(from, "", imageUrl);
-        // Sende die Antwort zurück
         await whatsAppService.sendMessage(from, response);
         return;
       }
@@ -58,21 +56,6 @@ router.post('/', async (req, res) => {
       // Verarbeite Textnachrichten
       if (messageType === 'text') {
         const text = message.text.body;
-        
-        // Verarbeite "Hey Meta" Befehle
-        if (text.toLowerCase().startsWith('hey meta')) {
-          const command = text.toLowerCase();
-          log(LOG_LEVELS.INFO, 'Meta Glasses Befehl empfangen:', command);
-
-          if (command.includes('message to')) {
-            const content = command.split('message to')[1].trim();
-            const response = await openAIService.processMessage(from, content);
-            await whatsAppService.sendMessage(from, response);
-          }
-          return;
-        }
-
-        // Verarbeite normale Textnachrichten
         log(LOG_LEVELS.INFO, 'Processing text message:', { text });
         const response = await openAIService.processMessage(from, text);
         await whatsAppService.sendMessage(from, response);
