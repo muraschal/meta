@@ -18,7 +18,7 @@ process.on('uncaughtException', (error) => {
     log(LOG_LEVELS.ERROR, 'Uncaught Exception:', error);
 });
 
-const openai = new OpenAIService(OPENAI_CONFIG.API_KEY, OPENAI_CONFIG.ORG_ID);
+const openai = new OpenAIService();
 
 // Hilfsfunktion für Webhook-Verifizierung
 async function verifyWebhook(req) {
@@ -99,7 +99,7 @@ export default async function handler(req, res) {
 
           // Generiere OpenAI Antwort
           log(LOG_LEVELS.INFO, 'Generiere OpenAI Antwort...');
-          const aiResponse = await OpenAIService.generateResponse(result.content);
+          const aiResponse = await openai.generateResponse(result.content);
           log(LOG_LEVELS.INFO, '✓ OpenAI Antwort generiert');
 
           // Sende finale Antwort
