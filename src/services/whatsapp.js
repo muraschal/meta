@@ -6,13 +6,73 @@ class WhatsAppService {
   constructor() {
     this.apiVersion = 'v22.0';
     this.baseUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    
+    // Validiere die Phone Number ID
     this.phoneNumberId = process.env.META_PHONE_NUMBER_ID;
     if (!this.phoneNumberId) {
       log(LOG_LEVELS.ERROR, 'META_PHONE_NUMBER_ID ist nicht konfiguriert');
       throw new Error('META_PHONE_NUMBER_ID muss in den Umgebungsvariablen gesetzt sein');
     }
-    log(LOG_LEVELS.INFO, `WhatsApp Service initialisiert mit Phone Number ID: ${this.phoneNumberId}`);
-    this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID || '1233067364910106';
+
+    // Validiere das Business Account ID
+    this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID;
+    if (!this.businessAccountId) {
+      log(LOG_LEVELS.ERROR, 'META_BUSINESS_ACCOUNT_ID ist nicht konfiguriert');
+      throw new Error('META_BUSINESS_ACCOUNT_ID muss in den Umgebungsvariablen gesetzt sein');
+    }
+
+    // Logge die Konfiguration
+    log(LOG_LEVELS.INFO, 'WhatsApp Service Konfiguration:', {
+      apiVersion: this.apiVersion,
+      phoneNumberId: this.phoneNumberId,
+      businessAccountId: this.businessAccountId
+    });
+
+    // Validiere die Konfiguration
+    this.validateConfig();
+  }
+
+  validateConfig() {
+    // Prüfe auf gültige IDs
+    if (!/^\d+$/.test(this.phoneNumberId)) {
+      log(LOG_LEVELS.ERROR, 'Ungültige Phone Number ID:', this.phoneNumberId);
+      throw new Error('Phone Number ID muss eine gültige numerische ID sein');
+    }
+
+    if (!/^\d+$/.test(this.businessAccountId)) {
+      log(LOG_LEVELS.ERROR, 'Ungültige Business Account ID:', this.businessAccountId);
+      throw new Error('Business Account ID muss eine gültige numerische ID sein');
+    }
+  }
+
+  async verifyPhoneNumber() {
+    try {
+      const token = await tokenManager.getCurrentToken();
+      const endpoint = `${this.baseUrl}/${this.phoneNumberId}`;
+      
+      log(LOG_LEVELS.DEBUG, 'Überprüfe Phone Number ID:', {
+        endpoint,
+        phoneNumberId: this.phoneNumberId
+      });
+
+      const response = await axios({
+        method: 'get',
+        url: endpoint,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      log(LOG_LEVELS.INFO, 'Phone Number ID verifiziert:', response.data);
+      return true;
+    } catch (error) {
+      log(LOG_LEVELS.ERROR, 'Fehler bei der Phone Number ID Verifizierung:', {
+        error: error.response?.data?.error,
+        phoneNumberId: this.phoneNumberId
+      });
+      return false;
+    }
   }
 
   formatErrorDetails(error) {
