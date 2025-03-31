@@ -5,10 +5,18 @@ export const OPENAI_CONFIG = {
   ORG_ID: process.env.OPENAI_ORG_ID,
 
   validate() {
-    if (!this.API_KEY) {
-      log(LOG_LEVELS.ERROR, 'Fehlender OPENAI_API_KEY');
-      throw new Error('OPENAI_API_KEY muss konfiguriert sein');
+    const requiredVars = [
+      ['API_KEY', this.API_KEY],
+      ['ORG_ID', this.ORG_ID]
+    ];
+
+    for (const [name, value] of requiredVars) {
+      if (!value) {
+        log(LOG_LEVELS.ERROR, `Fehlender OPENAI_${name}`);
+        throw new Error(`OPENAI_${name} muss konfiguriert sein`);
+      }
     }
+    
     log(LOG_LEVELS.INFO, 'OpenAI Konfiguration validiert');
   }
 }; 

@@ -21,7 +21,10 @@ export const META_CONFIG = {
   validate() {
     const requiredVars = [
       ['PHONE_NUMBER_ID', this.API.PHONE_NUMBER_ID],
+      ['BUSINESS_ACCOUNT_ID', this.API.BUSINESS_ACCOUNT_ID],
       ['ACCESS_TOKEN', this.AUTH.ACCESS_TOKEN],
+      ['APP_ID', this.AUTH.APP_ID],
+      ['APP_SECRET', this.AUTH.APP_SECRET],
       ['WEBHOOK_VERIFY_TOKEN', this.WEBHOOK.VERIFY_TOKEN]
     ];
 
