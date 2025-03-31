@@ -5,7 +5,12 @@ import { log, LOG_LEVELS } from '../utils/logger.js';
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
-    this.phoneNumberId = process.env.META_PHONE_NUMBER_ID || '637450429443686';
+    this.phoneNumberId = process.env.META_PHONE_NUMBER_ID;
+    if (!this.phoneNumberId) {
+      log(LOG_LEVELS.ERROR, 'META_PHONE_NUMBER_ID ist nicht konfiguriert');
+      throw new Error('META_PHONE_NUMBER_ID muss in den Umgebungsvariablen gesetzt sein');
+    }
+    log(LOG_LEVELS.INFO, `WhatsApp Service initialisiert mit Phone Number ID: ${this.phoneNumberId}`);
     this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID || '1233067364910106';
     this.apiVersion = 'v17.0';
   }
@@ -38,15 +43,44 @@ class WhatsAppService {
     return errorDetails;
   }
 
+  formatPhoneNumber(number) {
+    // Entferne alle nicht-numerischen Zeichen
+    const cleaned = number.replace(/\D/g, '');
+    // Stelle sicher, dass die Nummer mit "+" beginnt
+    return cleaned.startsWith('') ? `+${cleaned}` : cleaned;
+  }
+
   async sendMessage(to, message, phoneNumberId = this.phoneNumberId, type = 'text') {
     try {
       const token = await tokenManager.getCurrentToken();
+      const formattedTo = this.formatPhoneNumber(to);
+      
+      // Debug-Logs für Request-Details
+      log(LOG_LEVELS.DEBUG, 'Sende WhatsApp Nachricht:', {
+        phoneNumberId,
+        to: formattedTo,
+        messageType: type,
+        messageLength: message.length
+      });
       
       const endpoint = `${this.baseUrl}/${phoneNumberId}/messages`;
       
       try {
-        log(LOG_LEVELS.DEBUG, `Sende Nachricht an: ${endpoint}`);
-        log(LOG_LEVELS.DEBUG, `Token (erste 10 Zeichen): ${token.substring(0, 10)}...`);
+        const requestData = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: formattedTo,
+          type,
+          ...(type === 'text' ? { 
+            text: { 
+              preview_url: false,
+              body: message 
+            } 
+          } : {})
+        };
+
+        // Debug-Log für Request-Payload
+        log(LOG_LEVELS.DEBUG, 'Request Payload:', requestData);
         
         const response = await axios({
           method: 'post',
@@ -55,40 +89,40 @@ class WhatsAppService {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          data: {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to,
-            type,
-            ...(type === 'text' ? { text: { body: message } } : {})
-          },
+          data: requestData,
           timeout: 10000
         });
         
+        // Debug-Log für erfolgreiche Antwort
         log(LOG_LEVELS.DEBUG, 'API Antwort:', response.data);
+        log(LOG_LEVELS.INFO, `✓ Nachricht erfolgreich gesendet an ${formattedTo}`);
         return response.data;
       } catch (err) {
         const errorDetails = this.formatErrorDetails(err);
+        
+        // Erweiterte Fehlerprotokollierung
         log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', {
           ...errorDetails,
           endpoint,
-          to,
-          type
+          requestData: {
+            to: formattedTo,
+            type,
+            phoneNumberId
+          },
+          responseData: err.response?.data
         });
+        
+        if (errorDetails.code === 100 && errorDetails.subcode === 33) {
+          log(LOG_LEVELS.ERROR, 'Detaillierte API-Fehlermeldung:', {
+            error: err.response?.data?.error,
+            headers: err.response?.headers
+          });
+        }
+        
         throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
       }
     } catch (error) {
-      if (error.response?.data?.error) {
-        const errorDetails = this.formatErrorDetails(error);
-        log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', errorDetails);
-        throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
-      } else {
-        log(LOG_LEVELS.ERROR, 'Netzwerk- oder Systemfehler:', {
-          message: error.message,
-          code: error.code
-        });
-        throw error;
-      }
+      throw error;
     }
   }
 
