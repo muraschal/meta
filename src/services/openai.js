@@ -1,9 +1,11 @@
-const OpenAI = require('openai');
+import OpenAI from 'openai';
+import { log, LOG_LEVELS } from '../utils/logger.js';
 
 class OpenAIService {
   constructor() {
-    this.openai = new OpenAI({
+    this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID })
     });
     this.conversations = new Map();
   }
@@ -34,7 +36,7 @@ class OpenAIService {
         });
       }
 
-      const completion = await this.openai.chat.completions.create({
+      const completion = await this.client.chat.completions.create({
         model: 'gpt-4-vision-preview',
         messages: conversation,
         max_tokens: 1000,
@@ -54,6 +56,44 @@ class OpenAIService {
   async clearConversation(userId) {
     this.conversations.delete(userId);
   }
+
+  async generateResponse(content) {
+    try {
+      log(LOG_LEVELS.DEBUG, 'OpenAI Anfrage:', content);
+      
+      const completion = await this.client.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          { 
+            role: "system", 
+            content: "You are a helpful assistant providing precise and informative answers. Always respond in English." 
+          },
+          { 
+            role: "user", 
+            content 
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.7
+      });
+
+      if (!completion?.choices?.[0]?.message?.content) {
+        throw new Error('Keine gültige Antwort von OpenAI erhalten');
+      }
+
+      const response = completion.choices[0].message.content;
+      log(LOG_LEVELS.DEBUG, 'OpenAI Antwort:', response);
+      return response;
+    } catch (error) {
+      log(LOG_LEVELS.ERROR, 'OpenAI API Fehler:', {
+        message: error.message,
+        code: error.response?.status,
+        data: error.response?.data
+      });
+      throw new Error(`OpenAI Fehler: ${error.message}`);
+    }
+  }
 }
 
-module.exports = new OpenAIService(); 
+const openaiService = new OpenAIService();
+export default openaiService; 
