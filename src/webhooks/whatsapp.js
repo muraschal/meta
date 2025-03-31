@@ -5,6 +5,8 @@ import { WhatsAppService } from '../services/whatsapp.js';
 import { OpenAIService } from '../services/openai.js';
 
 const router = express.Router();
+const openAIService = new OpenAIService();
+const whatsAppService = new WhatsAppService();
 
 // Webhook-Verifizierung für Meta
 router.get('/', (req, res) => {
@@ -49,9 +51,9 @@ router.post('/', async (req, res) => {
         if (command.includes('message to')) {
           const content = command.split('message to')[1].trim();
           // Verarbeite die Nachricht mit OpenAI
-          const response = await OpenAIService.processMessage(from, content);
+          const response = await openAIService.processMessage(from, content);
           // Sende die Antwort zurück
-          await WhatsAppService.sendMessage(from, response);
+          await whatsAppService.sendMessage(from, response);
         }
       }
 
@@ -59,9 +61,9 @@ router.post('/', async (req, res) => {
       if (messageType === 'image') {
         const imageUrl = message.image.url;
         // Verarbeite das Bild mit OpenAI Vision
-        const response = await OpenAIService.processMessage(from, "", imageUrl);
+        const response = await openAIService.processMessage(from, "", imageUrl);
         // Sende die Antwort zurück
-        await WhatsAppService.sendMessage(from, response);
+        await whatsAppService.sendMessage(from, response);
       }
     }
   } catch (error) {
