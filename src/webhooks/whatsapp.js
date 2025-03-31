@@ -42,27 +42,39 @@ router.post('/', async (req, res) => {
       const from = message.from;
       const messageType = message.type;
 
-      // Verarbeite "Hey Meta" Befehle
-      if (messageType === 'text' && message.text.body.toLowerCase().startsWith('hey meta')) {
-        const command = message.text.body.toLowerCase();
-        log(LOG_LEVELS.INFO, 'Meta Glasses Befehl empfangen:', command);
-
-        // Beispiel: "hey meta, message to xy"
-        if (command.includes('message to')) {
-          const content = command.split('message to')[1].trim();
-          // Verarbeite die Nachricht mit OpenAI
-          const response = await openAIService.processMessage(from, content);
-          // Sende die Antwort zurück
-          await whatsAppService.sendMessage(from, response);
-        }
-      }
+      log(LOG_LEVELS.INFO, 'Received message:', { type: messageType, from });
 
       // Verarbeite Bilder
       if (messageType === 'image') {
         const imageUrl = message.image.url;
+        log(LOG_LEVELS.INFO, 'Processing image:', { url: imageUrl });
         // Verarbeite das Bild mit OpenAI Vision
         const response = await openAIService.processMessage(from, "", imageUrl);
         // Sende die Antwort zurück
+        await whatsAppService.sendMessage(from, response);
+        return;
+      }
+
+      // Verarbeite Textnachrichten
+      if (messageType === 'text') {
+        const text = message.text.body;
+        
+        // Verarbeite "Hey Meta" Befehle
+        if (text.toLowerCase().startsWith('hey meta')) {
+          const command = text.toLowerCase();
+          log(LOG_LEVELS.INFO, 'Meta Glasses Befehl empfangen:', command);
+
+          if (command.includes('message to')) {
+            const content = command.split('message to')[1].trim();
+            const response = await openAIService.processMessage(from, content);
+            await whatsAppService.sendMessage(from, response);
+          }
+          return;
+        }
+
+        // Verarbeite normale Textnachrichten
+        log(LOG_LEVELS.INFO, 'Processing text message:', { text });
+        const response = await openAIService.processMessage(from, text);
         await whatsAppService.sendMessage(from, response);
       }
     }
