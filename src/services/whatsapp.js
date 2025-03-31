@@ -10,6 +10,34 @@ class WhatsAppService {
     this.apiVersion = 'v17.0';
   }
 
+  formatErrorDetails(error) {
+    const errorDetails = {
+      message: error.message,
+      code: error.response?.data?.error?.code,
+      subcode: error.response?.data?.error?.error_subcode,
+      type: error.response?.data?.error?.type,
+      fbTraceId: error.response?.data?.error?.fbtrace_id,
+      status: error.response?.status
+    };
+
+    // Füge hilfreiche Kontextinformationen hinzu
+    switch (errorDetails.code) {
+      case 100:
+        errorDetails.hint = 'Möglicherweise falsche ID oder fehlende Berechtigungen';
+        break;
+      case 190:
+        errorDetails.hint = 'Token ist ungültig oder abgelaufen';
+        break;
+      case 200:
+        errorDetails.hint = 'Fehlende Berechtigungen für diese Operation';
+        break;
+      default:
+        errorDetails.hint = 'Unbekannter Fehler, bitte prüfen Sie die Meta Developer Console';
+    }
+
+    return errorDetails;
+  }
+
   async sendMessage(to, message, phoneNumberId = this.phoneNumberId, type = 'text') {
     try {
       const token = await tokenManager.getCurrentToken();
@@ -21,8 +49,10 @@ class WhatsAppService {
       ];
       
       let lastError = null;
+      let attemptCount = 0;
       
       for (const endpoint of endpoints) {
+        attemptCount++;
         try {
           const response = await axios({
             method: 'post',
@@ -39,21 +69,30 @@ class WhatsAppService {
             timeout: 10000
           });
           
+          log(LOG_LEVELS.DEBUG, `✓ Erfolgreich gesendet über Endpunkt ${attemptCount}`);
           return response.data;
         } catch (err) {
           lastError = err;
+          log(LOG_LEVELS.DEBUG, `⚠️ Endpunkt ${attemptCount} fehlgeschlagen`);
           continue;
         }
       }
       
-      throw lastError || new Error('Alle Endpunkte fehlgeschlagen');
+      const errorDetails = this.formatErrorDetails(lastError);
+      log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', errorDetails);
+      throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      throw error;
+      if (error.response?.data?.error) {
+        const errorDetails = this.formatErrorDetails(error);
+        log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', errorDetails);
+        throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
+      } else {
+        log(LOG_LEVELS.ERROR, 'Netzwerk- oder Systemfehler:', {
+          message: error.message,
+          code: error.code
+        });
+        throw error;
+      }
     }
   }
 
@@ -68,8 +107,10 @@ class WhatsAppService {
       ];
       
       let lastError = null;
+      let attemptCount = 0;
       
       for (const endpoint of endpoints) {
+        attemptCount++;
         try {
           const response = await axios({
             method: 'post',
@@ -89,17 +130,30 @@ class WhatsAppService {
             timeout: 10000
           });
           
+          log(LOG_LEVELS.DEBUG, `✓ Bild erfolgreich gesendet über Endpunkt ${attemptCount}`);
           return response.data;
         } catch (err) {
           lastError = err;
+          log(LOG_LEVELS.DEBUG, `⚠️ Bild-Endpunkt ${attemptCount} fehlgeschlagen`);
           continue;
         }
       }
       
-      throw lastError || new Error('Alle Bild-Endpunkte fehlgeschlagen');
+      const errorDetails = this.formatErrorDetails(lastError);
+      log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', errorDetails);
+      throw new Error(`WhatsApp API Bild-Fehler: ${errorDetails.hint}`);
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', error);
-      throw error;
+      if (error.response?.data?.error) {
+        const errorDetails = this.formatErrorDetails(error);
+        log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', errorDetails);
+        throw new Error(`WhatsApp API Bild-Fehler: ${errorDetails.hint}`);
+      } else {
+        log(LOG_LEVELS.ERROR, 'Netzwerk- oder Systemfehler beim Bild-Upload:', {
+          message: error.message,
+          code: error.code
+        });
+        throw error;
+      }
     }
   }
 
