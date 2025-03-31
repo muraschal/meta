@@ -5,8 +5,8 @@ import { log, LOG_LEVELS } from '../utils/logger.js';
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
-    this.phoneNumberId = '637450429443686';
-    this.businessAccountId = '1233067364910106';
+    this.phoneNumberId = process.env.META_PHONE_NUMBER_ID || '637450429443686';
+    this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID || '1233067364910106';
     this.apiVersion = 'v17.0';
   }
 
@@ -42,45 +42,41 @@ class WhatsAppService {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const endpoints = [
-        `${this.baseUrl}/${this.businessAccountId}/messages`,
-        `${this.baseUrl}/${phoneNumberId}/messages`,
-        `https://graph.facebook.com/${this.apiVersion}/${this.businessAccountId}/messages`
-      ];
+      const endpoint = `${this.baseUrl}/${phoneNumberId}/messages`;
       
-      let lastError = null;
-      let attemptCount = 0;
-      
-      for (const endpoint of endpoints) {
-        attemptCount++;
-        try {
-          const response = await axios({
-            method: 'post',
-            url: endpoint,
-            params: { access_token: token },
-            headers: { 'Content-Type': 'application/json' },
-            data: {
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to,
-              type,
-              ...(type === 'text' ? { text: { body: message } } : {})
-            },
-            timeout: 10000
-          });
-          
-          log(LOG_LEVELS.DEBUG, `✓ Erfolgreich gesendet über Endpunkt ${attemptCount}`);
-          return response.data;
-        } catch (err) {
-          lastError = err;
-          log(LOG_LEVELS.DEBUG, `⚠️ Endpunkt ${attemptCount} fehlgeschlagen`);
-          continue;
-        }
+      try {
+        log(LOG_LEVELS.DEBUG, `Sende Nachricht an: ${endpoint}`);
+        log(LOG_LEVELS.DEBUG, `Token (erste 10 Zeichen): ${token.substring(0, 10)}...`);
+        
+        const response = await axios({
+          method: 'post',
+          url: endpoint,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          data: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type,
+            ...(type === 'text' ? { text: { body: message } } : {})
+          },
+          timeout: 10000
+        });
+        
+        log(LOG_LEVELS.DEBUG, 'API Antwort:', response.data);
+        return response.data;
+      } catch (err) {
+        const errorDetails = this.formatErrorDetails(err);
+        log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', {
+          ...errorDetails,
+          endpoint,
+          to,
+          type
+        });
+        throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
       }
-      
-      const errorDetails = this.formatErrorDetails(lastError);
-      log(LOG_LEVELS.ERROR, 'WhatsApp API Fehler:', errorDetails);
-      throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
     } catch (error) {
       if (error.response?.data?.error) {
         const errorDetails = this.formatErrorDetails(error);
@@ -100,48 +96,43 @@ class WhatsAppService {
     try {
       const token = await tokenManager.getCurrentToken();
       
-      const endpoints = [
-        `${this.baseUrl}/${this.businessAccountId}/messages`,
-        `${this.baseUrl}/${phoneNumberId}/messages`,
-        `https://graph.facebook.com/${this.apiVersion}/${this.businessAccountId}/messages`
-      ];
+      const endpoint = `${this.baseUrl}/${phoneNumberId}/messages`;
       
-      let lastError = null;
-      let attemptCount = 0;
-      
-      for (const endpoint of endpoints) {
-        attemptCount++;
-        try {
-          const response = await axios({
-            method: 'post',
-            url: endpoint,
-            params: { access_token: token },
-            headers: { 'Content-Type': 'application/json' },
-            data: {
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to,
-              type: 'image',
-              image: {
-                link: imageUrl,
-                caption,
-              }
-            },
-            timeout: 10000
-          });
-          
-          log(LOG_LEVELS.DEBUG, `✓ Bild erfolgreich gesendet über Endpunkt ${attemptCount}`);
-          return response.data;
-        } catch (err) {
-          lastError = err;
-          log(LOG_LEVELS.DEBUG, `⚠️ Bild-Endpunkt ${attemptCount} fehlgeschlagen`);
-          continue;
-        }
+      try {
+        log(LOG_LEVELS.DEBUG, `Sende Bild an: ${endpoint}`);
+        
+        const response = await axios({
+          method: 'post',
+          url: endpoint,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          data: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'image',
+            image: {
+              link: imageUrl,
+              caption,
+            }
+          },
+          timeout: 10000
+        });
+        
+        log(LOG_LEVELS.DEBUG, 'API Antwort:', response.data);
+        return response.data;
+      } catch (err) {
+        const errorDetails = this.formatErrorDetails(err);
+        log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', {
+          ...errorDetails,
+          endpoint,
+          to,
+          imageUrl
+        });
+        throw new Error(`WhatsApp API Bild-Fehler: ${errorDetails.hint}`);
       }
-      
-      const errorDetails = this.formatErrorDetails(lastError);
-      log(LOG_LEVELS.ERROR, 'WhatsApp API Bild-Fehler:', errorDetails);
-      throw new Error(`WhatsApp API Bild-Fehler: ${errorDetails.hint}`);
     } catch (error) {
       if (error.response?.data?.error) {
         const errorDetails = this.formatErrorDetails(error);
