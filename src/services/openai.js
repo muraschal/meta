@@ -27,26 +27,20 @@ class OpenAIService {
     try {
       let conversation = this.conversations.get(userId) || [];
       
-      // System Message für mehrsprachige Unterstützung
+      // System Message for English responses
       if (conversation.length === 0) {
         conversation.push({
           role: 'system',
-          content: 'Du bist ein fortschrittlicher KI-Assistent, basierend auf GPT-4. Du antwortest in der gleichen Sprache, in der die Frage gestellt wurde. Sei präzise und informativ. Wenn nach Wetterdaten gefragt wird, warte auf die Echtzeitdaten, die ich dir zur Verfügung stelle.'
+          content: 'You are an advanced AI assistant based on GPT-4. Always respond in English. For images, provide a detailed description and analysis of what you see. Be precise and informative.'
         });
       }
-
-      // Prüfe auf Wetteranfragen
-      if (message.toLowerCase().includes('wetter')) {
-        const cityMatch = message.match(/wetter in (\w+)/i);
-        if (cityMatch) {
-          const weatherData = await this.getWeatherData(cityMatch[1]);
-          if (weatherData) {
-            message = `${message}\n\nEchtzeitdaten: ${weatherData}`;
-          }
-        }
-      }
       
-      // Wenn ein Bild vorhanden ist, fügen wir es zur Konversation hinzu
+      // If only image is provided without text, add a default prompt
+      if (imageUrl && (!message || message.trim() === '')) {
+        message = "Please describe what you see in this image in detail.";
+      }
+
+      // Handle message with or without image
       if (imageUrl) {
         conversation.push({
           role: 'user',
@@ -80,11 +74,11 @@ class OpenAIService {
       const response = completion.choices[0].message;
       conversation.push(response);
       
-      // Behalte maximal die letzten 10 Nachrichten für Kontext
+      // Keep max 10 messages for context
       if (conversation.length > 10) {
         conversation = [
           conversation[0], // System Message
-          ...conversation.slice(-9) // Letzte 9 Nachrichten
+          ...conversation.slice(-9) // Last 9 messages
         ];
       }
       
@@ -92,7 +86,7 @@ class OpenAIService {
 
       return response.content;
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'Fehler bei der OpenAI-Verarbeitung:', error);
+      log(LOG_LEVELS.ERROR, 'Error processing OpenAI request:', error);
       throw error;
     }
   }
@@ -103,14 +97,14 @@ class OpenAIService {
 
   async generateResponse(content) {
     try {
-      log(LOG_LEVELS.DEBUG, 'OpenAI Anfrage:', content);
+      log(LOG_LEVELS.DEBUG, 'OpenAI Request:', content);
       
       const completion = await this.client.chat.completions.create({
         model: this.defaultModel,
         messages: [
           { 
             role: "system", 
-            content: "Du bist ein fortschrittlicher KI-Assistent, basierend auf GPT-4. Du antwortest in der gleichen Sprache, in der die Frage gestellt wurde. Sei präzise und informativ. Du hast Zugriff auf aktuelle Informationen bis Januar 2024. Für Echtzeit-Daten wie Wetter, Aktienkurse oder Live-Events verweise die Nutzer freundlich an entsprechende Dienste." 
+            content: "You are an advanced AI assistant based on GPT-4. Always respond in English. Be precise and informative." 
           },
           { 
             role: "user", 
@@ -124,19 +118,19 @@ class OpenAIService {
       });
 
       if (!completion?.choices?.[0]?.message?.content) {
-        throw new Error('Keine gültige Antwort von OpenAI erhalten');
+        throw new Error('No valid response received from OpenAI');
       }
 
       const response = completion.choices[0].message.content;
-      log(LOG_LEVELS.DEBUG, 'OpenAI Antwort:', response);
+      log(LOG_LEVELS.DEBUG, 'OpenAI Response:', response);
       return response;
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'OpenAI API Fehler:', {
+      log(LOG_LEVELS.ERROR, 'OpenAI API Error:', {
         message: error.message,
         code: error.response?.status,
         data: error.response?.data
       });
-      throw new Error(`OpenAI Fehler: ${error.message}`);
+      throw new Error(`OpenAI Error: ${error.message}`);
     }
   }
 }
