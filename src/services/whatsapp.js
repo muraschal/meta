@@ -43,6 +43,9 @@ class WhatsAppService {
       log(LOG_LEVELS.ERROR, 'Ungültige Business Account ID:', this.businessAccountId);
       throw new Error('Business Account ID muss eine gültige numerische ID sein');
     }
+
+    // Überprüfe die API-Konfiguration
+    this.verifyPhoneNumber();
   }
 
   async verifyPhoneNumber() {
@@ -50,11 +53,13 @@ class WhatsAppService {
       const token = await tokenManager.getCurrentToken();
       const endpoint = `${this.baseUrl}/${this.phoneNumberId}`;
       
-      log(LOG_LEVELS.DEBUG, 'Überprüfe Phone Number ID:', {
+      log(LOG_LEVELS.DEBUG, 'Überprüfe Phone Number ID und Berechtigungen:', {
         endpoint,
-        phoneNumberId: this.phoneNumberId
+        phoneNumberId: this.phoneNumberId,
+        businessAccountId: this.businessAccountId
       });
 
+      // Überprüfe die Phone Number ID
       const response = await axios({
         method: 'get',
         url: endpoint,
@@ -64,12 +69,34 @@ class WhatsAppService {
         }
       });
 
-      log(LOG_LEVELS.INFO, 'Phone Number ID verifiziert:', response.data);
+      // Überprüfe die Business Account Berechtigungen
+      const businessEndpoint = `${this.baseUrl}/${this.businessAccountId}/message_templates`;
+      const businessResponse = await axios({
+        method: 'get',
+        url: businessEndpoint,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      log(LOG_LEVELS.INFO, 'API-Konfiguration verifiziert:', {
+        phoneNumber: response.data,
+        businessAccount: businessResponse.data
+      });
       return true;
     } catch (error) {
-      log(LOG_LEVELS.ERROR, 'Fehler bei der Phone Number ID Verifizierung:', {
-        error: error.response?.data?.error,
-        phoneNumberId: this.phoneNumberId
+      const errorDetails = this.formatErrorDetails(error);
+      log(LOG_LEVELS.ERROR, 'API-Konfigurationsfehler:', {
+        ...errorDetails,
+        phoneNumberId: this.phoneNumberId,
+        businessAccountId: this.businessAccountId,
+        suggestedActions: [
+          'Überprüfen Sie die Phone Number ID in der Meta Developer Console',
+          'Stellen Sie sicher, dass die Business Account ID korrekt ist',
+          'Überprüfen Sie die API-Berechtigungen (whatsapp_business_messaging)',
+          'Validieren Sie das Access Token'
+        ]
       });
       return false;
     }
