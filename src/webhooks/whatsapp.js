@@ -43,12 +43,23 @@ router.post('/', async (req, res) => {
       const message = messages[0];
       const from = message.from;
       const messageType = message.type;
+      const timestamp = message.timestamp || Date.now() / 1000;
 
-      log(LOG_LEVELS.INFO, 'Received message:', { type: messageType, from });
+      // Ignoriere Nachrichten, die älter als 5 Minuten sind
+      const fiveMinutesAgo = (Date.now() / 1000) - 300;
+      if (timestamp < fiveMinutesAgo) {
+        log(LOG_LEVELS.INFO, 'Ignoring old message:', { timestamp, type: messageType, from });
+        return;
+      }
+
+      log(LOG_LEVELS.INFO, 'Processing message:', { type: messageType, from, timestamp });
 
       // Verarbeite Bilder
       if (messageType === 'image') {
-        log(LOG_LEVELS.INFO, 'Full image message:', message);
+        log(LOG_LEVELS.INFO, 'Full image message:', {
+          ...message,
+          timestamp: new Date(timestamp * 1000).toISOString()
+        });
         
         try {
           if (!message.image || !message.image.id) {
@@ -57,7 +68,7 @@ router.post('/', async (req, res) => {
 
           // Get image ID and download URL
           const imageId = message.image.id;
-          const mediaUrl = `${META_CONFIG.API.BASE_URL}/${META_CONFIG.API.VERSION}/${imageId}`;
+          const mediaUrl = `${META_CONFIG.API.BASE_URL}/${META_CONFIG.API.VERSION}/${imageId}/`;
           
           log(LOG_LEVELS.INFO, 'Fetching image URL:', { mediaUrl });
           
@@ -67,21 +78,29 @@ router.post('/', async (req, res) => {
             method: 'get',
             url: mediaUrl,
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
             }
           });
           
           if (!mediaResponse.data || !mediaResponse.data.url) {
+            log(LOG_LEVELS.ERROR, 'Invalid media response:', mediaResponse.data);
             throw new Error('No valid image URL received from Meta API');
           }
 
           const imageUrl = mediaResponse.data.url;
           log(LOG_LEVELS.INFO, 'Processing image:', { imageUrl });
           
+          // Clear any existing conversation before processing image
+          await openAIService.clearConversation(from);
           const response = await openAIService.processMessage(from, "", imageUrl);
           await whatsAppService.sendMessage(from, response);
         } catch (error) {
-          log(LOG_LEVELS.ERROR, 'Error processing image:', error);
+          log(LOG_LEVELS.ERROR, 'Error processing image:', {
+            error: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+          });
           await whatsAppService.sendMessage(from, "I apologize, but I had trouble processing your image. Could you try sending it again?");
         }
         return;
@@ -90,7 +109,12 @@ router.post('/', async (req, res) => {
       // Verarbeite Textnachrichten
       if (messageType === 'text') {
         const text = message.text.body;
-        log(LOG_LEVELS.INFO, 'Processing text message:', { text });
+        log(LOG_LEVELS.INFO, 'Processing text message:', { 
+          text,
+          timestamp: new Date(timestamp * 1000).toISOString()
+        });
+        // Clear conversation for new text message
+        await openAIService.clearConversation(from);
         const response = await openAIService.processMessage(from, text);
         await whatsAppService.sendMessage(from, response);
       }
