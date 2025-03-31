@@ -1,24 +1,13 @@
-import OpenAI from 'openai';
-import https from 'https';
-import whatsappService from '../src/services/whatsapp.js';
-import tokenManager from '../src/services/token-manager.js';
-import openaiService from '../src/services/openai.js';
+import { META_CONFIG } from '../src/config/meta.js';
+import { OPENAI_CONFIG } from '../src/config/openai.js';
 import { log, LOG_LEVELS } from '../src/utils/logger.js';
+import { WhatsAppService } from '../src/services/whatsapp.js';
+import { OpenAIService } from '../src/services/openai.js';
+import tokenManager from '../src/services/token-manager.js';
 
-// Prüfe erforderliche Umgebungsvariablen
-const requiredEnvVars = [
-    'META_APP_ID',
-    'META_APP_SECRET',
-    'WEBHOOK_VERIFY_TOKEN',
-    'OPENAI_API_KEY',
-    'OPENAI_ORG_ID'
-];
-
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingEnvVars.length > 0) {
-    throw new Error(`Fehlende Umgebungsvariablen: ${missingEnvVars.join(', ')}`);
-}
+// Validiere erforderliche Umgebungsvariablen
+META_CONFIG.validate();
+OPENAI_CONFIG.validate();
 
 // Globales Error Handling
 process.on('unhandledRejection', (error) => {
@@ -29,15 +18,7 @@ process.on('uncaughtException', (error) => {
     log(LOG_LEVELS.ERROR, 'Uncaught Exception:', error);
 });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID })
-});
-
-// HTTPS Agent für besseres SSL-Handling
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false // Nur für Debugging, in Produktion auf true setzen
-});
+const openai = new OpenAIService(OPENAI_CONFIG.API_KEY, OPENAI_CONFIG.ORG_ID);
 
 // Hilfsfunktion für Webhook-Verifizierung
 async function verifyWebhook(req) {
@@ -45,7 +26,7 @@ async function verifyWebhook(req) {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === META_CONFIG.WEBHOOK.VERIFY_TOKEN) {
     return { status: 200, response: parseInt(challenge) || 'OK' };
   }
 
@@ -57,7 +38,7 @@ async function verifyWebhook(req) {
 async function sendWhatsAppMessageWithRetry(to, message, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await whatsappService.sendMessage(to, message);
+      return await WhatsAppService.sendMessage(to, message);
     } catch (error) {
       log(LOG_LEVELS.ERROR, `=== WHATSAPP FEHLER (Versuch ${attempt}/${retries}) ===`);
       log(LOG_LEVELS.ERROR, 'Fehlertyp:', error.constructor.name);
@@ -104,7 +85,7 @@ export default async function handler(req, res) {
       const payload = req.body;
 
       try {
-        const result = await whatsappService.handleWebhook(payload);
+        const result = await WhatsAppService.handleWebhook(payload);
 
         // Logge nur wichtige Nachrichtentypen
         if (result.type === 'message') {
@@ -118,7 +99,7 @@ export default async function handler(req, res) {
 
           // Generiere OpenAI Antwort
           log(LOG_LEVELS.INFO, 'Generiere OpenAI Antwort...');
-          const aiResponse = await openaiService.generateResponse(result.content);
+          const aiResponse = await OpenAIService.generateResponse(result.content);
           log(LOG_LEVELS.INFO, '✓ OpenAI Antwort generiert');
 
           // Sende finale Antwort
@@ -139,6 +120,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     log(LOG_LEVELS.ERROR, 'Unbehandelter Fehler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({
+      error: 'Fehler bei der Webhook-Verarbeitung',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 } 

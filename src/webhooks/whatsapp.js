@@ -10,7 +10,7 @@ router.get('/', (req, res) => {
   const challenge = req.query['hub.challenge'];
 
   // Verify Token sollte in Ihrer .env-Datei definiert sein
-  if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
     console.log('Webhook wurde verifiziert');
     res.status(200).send(challenge);
   } else {

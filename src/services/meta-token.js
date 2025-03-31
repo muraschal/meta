@@ -1,10 +1,13 @@
 import axios from 'axios';
+import { META_CONFIG } from '../config/meta.js';
+import { log, LOG_LEVELS } from '../utils/logger.js';
 
 class MetaTokenService {
     constructor() {
         this.baseUrl = 'https://graph.facebook.com/v17.0';
-        this.clientId = process.env.META_APP_ID;
-        this.clientSecret = process.env.META_APP_SECRET;
+        this.clientId = META_CONFIG.AUTH.APP_ID;
+        this.clientSecret = META_CONFIG.AUTH.APP_SECRET;
+        this.accessToken = META_CONFIG.AUTH.ACCESS_TOKEN;
     }
 
     async exchangeToLongLivedToken(shortLivedToken) {

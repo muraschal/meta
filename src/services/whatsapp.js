@@ -1,21 +1,24 @@
 import axios from 'axios';
 import tokenManager from './token-manager.js';
 import { log, LOG_LEVELS } from '../utils/logger.js';
+import { META_CONFIG } from '../config/meta.js';
 
-class WhatsAppService {
+export class WhatsAppService {
   constructor() {
-    this.apiVersion = 'v22.0';
-    this.baseUrl = `https://graph.facebook.com/${this.apiVersion}`;
-    
+    this.baseUrl = `${META_CONFIG.API.BASE_URL}/${META_CONFIG.API.VERSION}`;
+    this.phoneNumberId = META_CONFIG.API.PHONE_NUMBER_ID;
+    this.businessAccountId = META_CONFIG.API.BUSINESS_ACCOUNT_ID;
+    this.accessToken = META_CONFIG.AUTH.ACCESS_TOKEN;
+
+    META_CONFIG.validate();
+
     // Validiere die Phone Number ID
-    this.phoneNumberId = process.env.META_PHONE_NUMBER_ID;
     if (!this.phoneNumberId) {
       log(LOG_LEVELS.ERROR, 'META_PHONE_NUMBER_ID ist nicht konfiguriert');
       throw new Error('META_PHONE_NUMBER_ID muss in den Umgebungsvariablen gesetzt sein');
     }
 
     // Validiere das Business Account ID
-    this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID;
     if (!this.businessAccountId) {
       log(LOG_LEVELS.ERROR, 'META_BUSINESS_ACCOUNT_ID ist nicht konfiguriert');
       throw new Error('META_BUSINESS_ACCOUNT_ID muss in den Umgebungsvariablen gesetzt sein');
@@ -23,7 +26,7 @@ class WhatsAppService {
 
     // Logge die Konfiguration
     log(LOG_LEVELS.INFO, 'WhatsApp Service Konfiguration:', {
-      apiVersion: this.apiVersion,
+      apiVersion: META_CONFIG.API.VERSION,
       phoneNumberId: this.phoneNumberId,
       businessAccountId: this.businessAccountId
     });
@@ -148,7 +151,7 @@ class WhatsAppService {
         to: formattedTo,
         messageType: type,
         messageLength: message.length,
-        apiVersion: this.apiVersion
+        apiVersion: META_CONFIG.API.VERSION
       });
       
       const endpoint = `${this.baseUrl}/${phoneNumberId}/messages`;
@@ -203,7 +206,7 @@ class WhatsAppService {
             to: formattedTo,
             type,
             phoneNumberId,
-            apiVersion: this.apiVersion
+            apiVersion: META_CONFIG.API.VERSION
           },
           responseData: err.response?.data
         });
@@ -212,7 +215,7 @@ class WhatsAppService {
           log(LOG_LEVELS.ERROR, 'Detaillierte API-Fehlermeldung:', {
             error: err.response?.data?.error,
             headers: err.response?.headers,
-            apiVersion: this.apiVersion
+            apiVersion: META_CONFIG.API.VERSION
           });
           
           // Prüfe auf spezifische Fehlerszenarien
