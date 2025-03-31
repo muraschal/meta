@@ -37,12 +37,23 @@ class MetaTokenService {
 
     async getSystemUserToken() {
         try {
+            // Verwende den permanenten Access Token aus der Konfiguration
+            if (this.accessToken) {
+                log(LOG_LEVELS.INFO, 'Verwende permanenten Access Token');
+                return {
+                    token: this.accessToken,
+                    expiresIn: 5184000 // 60 Tage
+                };
+            }
+
+            // Fallback: Generiere einen System User Token nur wenn kein permanenter Token vorhanden
+            log(LOG_LEVELS.WARN, 'Kein permanenter Access Token konfiguriert, generiere System User Token');
             const response = await axios.get(`${this.baseUrl}/oauth/access_token`, {
                 params: {
                     grant_type: 'client_credentials',
                     client_id: this.clientId,
                     client_secret: this.clientSecret,
-                    scope: 'whatsapp_business_management'
+                    scope: 'whatsapp_business_messaging,whatsapp_business_management'
                 }
             });
 
@@ -55,7 +66,7 @@ class MetaTokenService {
                 expiresIn: response.data.expires_in || 5184000
             };
         } catch (error) {
-            console.error('Fehler beim System User Token:', error.response?.data || error.message);
+            log(LOG_LEVELS.ERROR, 'Fehler beim Token-Abruf:', error.response?.data || error.message);
             throw error;
         }
     }
