@@ -1,6 +1,32 @@
 import axios from 'axios';
 import tokenManager from './token-manager.js';
 
+// Logging-Konfiguration
+const LOG_LEVELS = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3
+};
+
+const CURRENT_LOG_LEVEL = LOG_LEVELS.INFO;
+
+function shouldLog(level) {
+  return level >= CURRENT_LOG_LEVEL;
+}
+
+function log(level, ...args) {
+  if (shouldLog(level)) {
+    const prefix = {
+      [LOG_LEVELS.DEBUG]: '🔍',
+      [LOG_LEVELS.INFO]: 'ℹ️',
+      [LOG_LEVELS.WARN]: '⚠️',
+      [LOG_LEVELS.ERROR]: '❌'
+    }[level];
+    console.log(prefix, ...args);
+  }
+}
+
 class WhatsAppService {
   constructor() {
     this.baseUrl = 'https://graph.facebook.com/v17.0';
@@ -28,7 +54,7 @@ class WhatsAppService {
       // Versuche verschiedene Endpunkte
       for (const endpoint of endpoints) {
         try {
-          console.log(`Versuche Endpunkt: ${endpoint}`);
+          log(LOG_LEVELS.DEBUG, `Versuche Endpunkt: ${endpoint}`);
           
           const response = await axios({
             method: 'post',
@@ -45,17 +71,17 @@ class WhatsAppService {
             timeout: 10000
           });
           
-          console.log(`Erfolgreiche Antwort von: ${endpoint}`);
+          log(LOG_LEVELS.DEBUG, `Erfolgreiche Antwort von: ${endpoint}`);
           return response.data;
         } catch (err) {
-          console.log(`Fehler bei Endpunkt ${endpoint}:`, err.message);
+          log(LOG_LEVELS.DEBUG, `Fehler bei Endpunkt ${endpoint}:`, err.message);
           lastError = err;
         }
       }
       
       throw lastError || new Error('Alle Endpunkte fehlgeschlagen');
     } catch (error) {
-      console.error('Fehler beim Senden der WhatsApp-Nachricht:', {
+      log(LOG_LEVELS.ERROR, 'Fehler beim Senden der WhatsApp-Nachricht:', {
         error: error.message,
         response: error.response?.data,
         status: error.response?.status,
@@ -84,7 +110,7 @@ class WhatsAppService {
       // Versuche verschiedene Endpunkte
       for (const endpoint of endpoints) {
         try {
-          console.log(`Versuche Endpunkt für Bild: ${endpoint}`);
+          log(LOG_LEVELS.DEBUG, `Versuche Endpunkt für Bild: ${endpoint}`);
           
           const response = await axios({
             method: 'post',
@@ -104,17 +130,17 @@ class WhatsAppService {
             timeout: 10000
           });
           
-          console.log(`Erfolgreiche Bild-Antwort von: ${endpoint}`);
+          log(LOG_LEVELS.DEBUG, `Erfolgreiche Bild-Antwort von: ${endpoint}`);
           return response.data;
         } catch (err) {
-          console.log(`Fehler bei Bild-Endpunkt ${endpoint}:`, err.message);
+          log(LOG_LEVELS.DEBUG, `Fehler bei Bild-Endpunkt ${endpoint}:`, err.message);
           lastError = err;
         }
       }
       
       throw lastError || new Error('Alle Bild-Endpunkte fehlgeschlagen');
     } catch (error) {
-      console.error('Fehler beim Senden des WhatsApp-Bildes:', error);
+      log(LOG_LEVELS.ERROR, 'Fehler beim Senden des WhatsApp-Bildes:', error);
       throw error;
     }
   }
@@ -129,6 +155,7 @@ class WhatsAppService {
     
     // Wenn es eine Status-Update-Nachricht ist
     if (value.statuses) {
+      log(LOG_LEVELS.DEBUG, 'Status-Update empfangen');
       return {
         type: 'status',
         status: value.statuses[0]
@@ -138,6 +165,7 @@ class WhatsAppService {
     // Wenn es eine eingehende Nachricht ist
     if (value.messages) {
       const message = value.messages[0];
+      log(LOG_LEVELS.INFO, 'Neue Nachricht empfangen');
       return {
         type: 'message',
         from: message.from,
@@ -151,6 +179,7 @@ class WhatsAppService {
 
     // Wenn es eine Metadaten-Update-Nachricht ist
     if (value.metadata) {
+      log(LOG_LEVELS.DEBUG, 'Metadaten-Update empfangen');
       return {
         type: 'metadata',
         phoneNumberId: value.metadata.phone_number_id,
