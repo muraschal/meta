@@ -4,7 +4,8 @@ import { log, LOG_LEVELS } from '../utils/logger.js';
 
 class WhatsAppService {
   constructor() {
-    this.baseUrl = 'https://graph.facebook.com/v17.0';
+    this.apiVersion = 'v22.0';
+    this.baseUrl = `https://graph.facebook.com/${this.apiVersion}`;
     this.phoneNumberId = process.env.META_PHONE_NUMBER_ID;
     if (!this.phoneNumberId) {
       log(LOG_LEVELS.ERROR, 'META_PHONE_NUMBER_ID ist nicht konfiguriert');
@@ -12,7 +13,6 @@ class WhatsAppService {
     }
     log(LOG_LEVELS.INFO, `WhatsApp Service initialisiert mit Phone Number ID: ${this.phoneNumberId}`);
     this.businessAccountId = process.env.META_BUSINESS_ACCOUNT_ID || '1233067364910106';
-    this.apiVersion = 'v17.0';
   }
 
   formatErrorDetails(error) {
@@ -60,7 +60,8 @@ class WhatsAppService {
         phoneNumberId,
         to: formattedTo,
         messageType: type,
-        messageLength: message.length
+        messageLength: message.length,
+        apiVersion: this.apiVersion
       });
       
       const endpoint = `${this.baseUrl}/${phoneNumberId}/messages`;
@@ -80,7 +81,14 @@ class WhatsAppService {
         };
 
         // Debug-Log für Request-Payload
-        log(LOG_LEVELS.DEBUG, 'Request Payload:', requestData);
+        log(LOG_LEVELS.DEBUG, 'Request Payload:', {
+          url: endpoint,
+          headers: {
+            'Authorization': 'Bearer [REDACTED]',
+            'Content-Type': 'application/json'
+          },
+          data: requestData
+        });
         
         const response = await axios({
           method: 'post',
@@ -107,7 +115,8 @@ class WhatsAppService {
           requestData: {
             to: formattedTo,
             type,
-            phoneNumberId
+            phoneNumberId,
+            apiVersion: this.apiVersion
           },
           responseData: err.response?.data
         });
@@ -115,8 +124,14 @@ class WhatsAppService {
         if (errorDetails.code === 100 && errorDetails.subcode === 33) {
           log(LOG_LEVELS.ERROR, 'Detaillierte API-Fehlermeldung:', {
             error: err.response?.data?.error,
-            headers: err.response?.headers
+            headers: err.response?.headers,
+            apiVersion: this.apiVersion
           });
+          
+          // Prüfe auf spezifische Fehlerszenarien
+          if (err.response?.headers?.['x-ad-api-version-warning']) {
+            log(LOG_LEVELS.ERROR, 'API-Version-Warnung:', err.response.headers['x-ad-api-version-warning']);
+          }
         }
         
         throw new Error(`WhatsApp API Fehler: ${errorDetails.hint}`);
