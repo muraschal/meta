@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
       if (messageType === 'image') {
         const imageUrl = message.image.url;
         // Verarbeite das Bild mit OpenAI Vision
-        const response = await OpenAIService.processMessage(from, "Beschreibe dieses Bild", imageUrl);
+        const response = await OpenAIService.processMessage(from, "", imageUrl);
         // Sende die Antwort zurück
         await WhatsAppService.sendMessage(from, response);
       }
