@@ -3,6 +3,8 @@ import { META_CONFIG } from '../config/meta.js';
 import { log, LOG_LEVELS } from '../utils/logger.js';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { OpenAIService } from '../services/openai.js';
+import axios from 'axios';
+import tokenManager from '../services/token-manager.js';
 
 const router = express.Router();
 const openAIService = new OpenAIService();
@@ -46,10 +48,42 @@ router.post('/', async (req, res) => {
 
       // Verarbeite Bilder
       if (messageType === 'image') {
-        const imageUrl = message.image.url;
-        log(LOG_LEVELS.INFO, 'Processing image:', { url: imageUrl });
-        const response = await openAIService.processMessage(from, "", imageUrl);
-        await whatsAppService.sendMessage(from, response);
+        log(LOG_LEVELS.INFO, 'Full image message:', message);
+        
+        try {
+          if (!message.image || !message.image.id) {
+            throw new Error('No valid image data received');
+          }
+
+          // Get image ID and download URL
+          const imageId = message.image.id;
+          const mediaUrl = `${META_CONFIG.API.BASE_URL}/${META_CONFIG.API.VERSION}/${imageId}`;
+          
+          log(LOG_LEVELS.INFO, 'Fetching image URL:', { mediaUrl });
+          
+          // Get media URL
+          const token = await tokenManager.getCurrentToken();
+          const mediaResponse = await axios({
+            method: 'get',
+            url: mediaUrl,
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (!mediaResponse.data || !mediaResponse.data.url) {
+            throw new Error('No valid image URL received from Meta API');
+          }
+
+          const imageUrl = mediaResponse.data.url;
+          log(LOG_LEVELS.INFO, 'Processing image:', { imageUrl });
+          
+          const response = await openAIService.processMessage(from, "", imageUrl);
+          await whatsAppService.sendMessage(from, response);
+        } catch (error) {
+          log(LOG_LEVELS.ERROR, 'Error processing image:', error);
+          await whatsAppService.sendMessage(from, "I apologize, but I had trouble processing your image. Could you try sending it again?");
+        }
         return;
       }
 
