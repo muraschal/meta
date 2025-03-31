@@ -19,6 +19,7 @@ process.on('uncaughtException', (error) => {
 });
 
 const openai = new OpenAIService();
+const whatsapp = new WhatsAppService();
 
 // Hilfsfunktion für Webhook-Verifizierung
 async function verifyWebhook(req) {
@@ -38,7 +39,7 @@ async function verifyWebhook(req) {
 async function sendWhatsAppMessageWithRetry(to, message, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await WhatsAppService.sendMessage(to, message);
+      return await whatsapp.sendMessage(to, message);
     } catch (error) {
       log(LOG_LEVELS.ERROR, `=== WHATSAPP FEHLER (Versuch ${attempt}/${retries}) ===`);
       log(LOG_LEVELS.ERROR, 'Fehlertyp:', error.constructor.name);
@@ -85,7 +86,7 @@ export default async function handler(req, res) {
       const payload = req.body;
 
       try {
-        const result = await WhatsAppService.handleWebhook(payload);
+        const result = await whatsapp.handleWebhook(payload);
 
         // Logge nur wichtige Nachrichtentypen
         if (result.type === 'message') {
